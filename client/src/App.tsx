@@ -9,6 +9,7 @@ import { Transactions } from "./pages/Transactions";
 const People = lazy(() => import("./pages/People").then((m) => ({ default: m.People })));
 const Accounts = lazy(() => import("./pages/Accounts").then((m) => ({ default: m.Accounts })));
 const Reports = lazy(() => import("./pages/Reports").then((m) => ({ default: m.Reports })));
+const Dashboard = lazy(() => import("./pages/Dashboard").then((m) => ({ default: m.Dashboard })));
 const Settings = lazy(() => import("./pages/Settings").then((m) => ({ default: m.Settings })));
 
 const NAV = [
@@ -16,7 +17,7 @@ const NAV = [
   { to: "/transactions", label: "Transactions", icon: Icons.list },
   { to: "/people", label: "People", icon: Icons.people },
   { to: "/accounts", label: "Accounts", icon: Icons.wallet },
-  { to: "/reports", label: "Reports", icon: Icons.chart },
+  { to: "/dashboard", label: "Dashboard", icon: Icons.chart },
 ];
 
 export default function App() {
@@ -72,6 +73,7 @@ export default function App() {
             <Route path="/transactions" element={<Transactions />} />
             <Route path="/people" element={<People />} />
             <Route path="/accounts" element={<Accounts />} />
+            <Route path="/dashboard" element={<Dashboard />} />
             <Route path="/reports" element={<Reports />} />
             <Route path="/settings" element={<Settings />} />
             <Route path="*" element={<Navigate to="/" replace />} />

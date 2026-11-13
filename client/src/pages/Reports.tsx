@@ -69,7 +69,12 @@ export function Reports() {
   return (
     <div className="main">
       <div className="between mb">
-        <h1>Reports</h1>
+        <div>
+          <h1>Reports</h1>
+          <Link to="/dashboard" className="small">
+            ‹ Back to dashboard
+          </Link>
+        </div>
         <a className="btn sm" href="/api/export.xlsx" download>
           ⬇ Excel
         </a>
