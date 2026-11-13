@@ -1,6 +1,6 @@
 import { Router } from "express";
 import type { Request, Response } from "express";
-import ExcelJS from "exceljs";
+import { buildWorkbook } from "./export.js";
 import { db, allSettings, setSetting, nowIso } from "./db.js";
 import {
   hasUser,
@@ -844,8 +844,9 @@ const TABLES = ["settings", "accounts", "categories", "people", "projects", "bil
 api.get("/backup", (_req, res) => {
   const out: Record<string, unknown> = { version: 1, exported_at: nowIso() };
   for (const t of TABLES) out[t] = db.prepare(`SELECT * FROM ${t}`).all();
-  res.setHeader("Content-Disposition", `attachment; filename="money-flow-backup-${new Date().toISOString().slice(0, 10)}.json"`);
-  res.json(out);
+  res.setHeader("Content-Type", "application/json; charset=utf-8");
+  res.setHeader("Content-Disposition", `attachment; filename="my-money-backup-${new Date().toISOString().slice(0, 10)}.json"`);
+  res.send(JSON.stringify(out, null, 2));
 });
 
 api.post(
@@ -859,8 +860,11 @@ api.post(
       for (const t of [...TABLES].reverse()) db.exec(`DELETE FROM ${t}`);
       for (const t of TABLES) {
         const rows = (data[t] as Record<string, unknown>[]) || [];
+        // Only real columns of the table are accepted; anything else in the file is ignored.
+        const allowed = new Set((db.prepare(`PRAGMA table_info(${t})`).all() as { name: string }[]).map((c) => c.name));
         for (const row of rows) {
-          const cols = Object.keys(row);
+          const cols = Object.keys(row).filter((c) => allowed.has(c));
+          if (cols.length === 0) continue;
           db.prepare(`INSERT INTO ${t} (${cols.join(",")}) VALUES (${cols.map(() => "?").join(",")})`).run(
             ...cols.map((c) => row[c] as string | number | null),
           );
@@ -881,147 +885,8 @@ api.post(
 
 api.get(
   "/export.xlsx",
-  wrap(async (req, res) => {
-    const settings = allSettings();
-    const currency = settings.currency || "EUR";
-    const accounts = db.prepare("SELECT * FROM accounts").all() as Record<string, unknown>[];
-    const categories = db.prepare("SELECT * FROM categories").all() as Record<string, unknown>[];
-    const people = db.prepare("SELECT * FROM people").all() as Record<string, unknown>[];
-    const projects = db.prepare("SELECT * FROM projects").all() as Record<string, unknown>[];
-    const bills = db.prepare("SELECT * FROM bills ORDER BY due_date").all() as Record<string, unknown>[];
-    const txs = db.prepare("SELECT * FROM transactions ORDER BY date, id").all() as Record<string, unknown>[];
-    const name = (list: Record<string, unknown>[], rowId: unknown) =>
-      rowId ? ((list.find((x) => x.id === rowId)?.name as string) ?? "") : "";
-
-    const wb = new ExcelJS.Workbook();
-    wb.creator = "My money";
-    const money = "#,##0.00";
-    const accCur = (accountId: unknown) => (accounts.find((a) => a.id === accountId)?.currency as string | null) || currency;
-    const toMain = (amount: number, accountId: unknown) => convert(amount, accCur(accountId), currency);
-
-    const ws = wb.addWorksheet("Transactions");
-    ws.columns = [
-      { header: "Date", key: "date", width: 12 },
-      { header: "Type", key: "type", width: 10 },
-      { header: "Amount", key: "amount", width: 14, style: { numFmt: money } },
-      { header: "Currency", key: "currency", width: 9 },
-      { header: `In ${currency}`, key: "main", width: 14, style: { numFmt: money } },
-      { header: "Account", key: "account", width: 18 },
-      { header: "To account", key: "to", width: 18 },
-      { header: "Category", key: "category", width: 20 },
-      { header: "Person", key: "person", width: 18 },
-      { header: "Project", key: "project", width: 18 },
-      { header: "Note", key: "note", width: 40 },
-    ];
-    for (const t of txs) {
-      ws.addRow({
-        date: t.date,
-        type: t.type,
-        amount: t.type === "expense" ? -(t.amount as number) : (t.amount as number),
-        currency: accCur(t.account_id),
-        main: t.type === "transfer" ? null : (t.type === "expense" ? -1 : 1) * toMain(t.amount as number, t.account_id),
-        account: name(accounts, t.account_id),
-        to: name(accounts, t.to_account_id),
-        category: name(categories, t.category_id),
-        person: name(people, t.person_id),
-        project: name(projects, t.project_id),
-        note: t.note ?? "",
-      });
-    }
-    ws.getRow(1).font = { bold: true };
-    ws.views = [{ state: "frozen", ySplit: 1 }];
-    ws.autoFilter = { from: "A1", to: "I1" };
-
-    const months = new Map<string, { income: number; expense: number }>();
-    for (const t of txs) {
-      if (t.type === "transfer") continue;
-      const m = (t.date as string).slice(0, 7);
-      const e = months.get(m) ?? { income: 0, expense: 0 };
-      if (t.type === "income") e.income += toMain(t.amount as number, t.account_id);
-      else e.expense += toMain(t.amount as number, t.account_id);
-      months.set(m, e);
-    }
-    const ms = wb.addWorksheet("Monthly summary");
-    ms.columns = [
-      { header: "Month", key: "month", width: 12 },
-      { header: "Income", key: "income", width: 14, style: { numFmt: money } },
-      { header: "Spending", key: "expense", width: 14, style: { numFmt: money } },
-      { header: "Kept", key: "kept", width: 14, style: { numFmt: money } },
-    ];
-    [...months.entries()].sort().forEach(([m, v]) => ms.addRow({ month: m, income: v.income, expense: v.expense, kept: v.income - v.expense }));
-    ms.getRow(1).font = { bold: true };
-
-    const cs = wb.addWorksheet("By category");
-    cs.columns = [
-      { header: "Month", key: "month", width: 12 },
-      { header: "Kind", key: "kind", width: 10 },
-      { header: "Category", key: "category", width: 22 },
-      { header: "Amount", key: "amount", width: 14, style: { numFmt: money } },
-    ];
-    const byCat = new Map<string, number>();
-    for (const t of txs) {
-      if (t.type === "transfer") continue;
-      const key = `${(t.date as string).slice(0, 7)}|${t.type}|${name(categories, t.category_id) || "Uncategorised"}`;
-      byCat.set(key, (byCat.get(key) ?? 0) + toMain(t.amount as number, t.account_id));
-    }
-    [...byCat.entries()].sort().forEach(([k, v]) => {
-      const [month, kind, category] = k.split("|");
-      cs.addRow({ month, kind, category, amount: v });
-    });
-    cs.getRow(1).font = { bold: true };
-
-    const bs = wb.addWorksheet("Payments to people");
-    bs.columns = [
-      { header: "Due date", key: "due", width: 12 },
-      { header: "Title", key: "title", width: 24 },
-      { header: "Person", key: "person", width: 18 },
-      { header: "Category", key: "category", width: 18 },
-      { header: "Currency", key: "currency", width: 9 },
-      { header: "Amount", key: "amount", width: 14, style: { numFmt: money } },
-      { header: "Paid", key: "paid", width: 14, style: { numFmt: money } },
-      { header: "Remaining", key: "remaining", width: 14, style: { numFmt: money } },
-      { header: "Repeat", key: "recurrence", width: 10 },
-      { header: "Status", key: "status", width: 10 },
-    ];
-    for (const b of bills) {
-      const paid = billPaid(b.id as number);
-      bs.addRow({
-        due: b.due_date,
-        title: b.title,
-        person: name(people, b.person_id),
-        category: name(categories, b.category_id),
-        currency: (b.currency as string | null) || currency,
-        amount: b.amount,
-        paid,
-        remaining: Math.max(0, (b.amount as number) - paid),
-        recurrence: b.recurrence,
-        status: b.status,
-      });
-    }
-    bs.getRow(1).font = { bold: true };
-
-    const as = wb.addWorksheet("Accounts");
-    as.columns = [
-      { header: "Account", key: "name", width: 20 },
-      { header: "Type", key: "type", width: 10 },
-      { header: "Currency", key: "currency", width: 9 },
-      { header: "Opening balance", key: "opening", width: 16, style: { numFmt: money } },
-      { header: "Balance", key: "balance", width: 16, style: { numFmt: money } },
-    ];
-    for (const a of accounts) {
-      let bal = a.opening_balance as number;
-      for (const t of txs) {
-        const amt = t.amount as number;
-        if (t.account_id === a.id) {
-          if (t.type === "income") bal += amt;
-          else bal -= amt;
-        }
-        if (t.to_account_id === a.id && t.type === "transfer") bal += (t.to_amount as number | null) ?? amt;
-      }
-      as.addRow({ name: a.name, type: a.type, currency: accCur(a.id), opening: a.opening_balance, balance: bal });
-    }
-    as.getRow(1).font = { bold: true };
-
+  wrap(async (_req, res) => {
+    const wb = await buildWorkbook(convert, billPaid);
     res.setHeader("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
     res.setHeader("Content-Disposition", `attachment; filename="my-money-${new Date().toISOString().slice(0, 10)}.xlsx"`);
     await wb.xlsx.write(res);
