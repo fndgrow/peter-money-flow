@@ -138,19 +138,7 @@ export function Home() {
                       </div>
                       {p.capped && <div className="tiny warn">{p.note}</div>}
                     </div>
-                    {p.done ? (
-                      <span className="pill good">Done</span>
-                    ) : (
-                      <button
-                        className="btn sm"
-                        onClick={() => {
-                          if (isCur && !window.confirm(`Close ${monthLabel(p.month, locale)} now? Anything you add later this month will not be moved.`)) return;
-                          run(() => api.post("/api/sweep/run", { month: p.month }), "Month closed");
-                        }}
-                      >
-                        Close now
-                      </button>
-                    )}
+                    {p.done && <span className="pill good">Done</span>}
                   </div>
                 </>
               );
