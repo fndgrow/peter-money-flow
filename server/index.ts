@@ -21,7 +21,13 @@ app.use((_req, res, next) => {
   res.setHeader("X-Content-Type-Options", "nosniff");
   res.setHeader("X-Frame-Options", "DENY");
   res.setHeader("Referrer-Policy", "same-origin");
+  // Private app: tell search engines and crawlers to never index or follow anything.
+  res.setHeader("X-Robots-Tag", "noindex, nofollow, noarchive, nosnippet");
   next();
+});
+
+app.get("/robots.txt", (_req, res) => {
+  res.type("text/plain").send("User-agent: *\nDisallow: /\n");
 });
 
 app.use("/api", api);
