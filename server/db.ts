@@ -189,10 +189,12 @@ type ExpenseDef = [string, string, string | null, [string, string][]?];
 const DEFAULT_EXPENSE: ExpenseDef[] = [
   ["Home", "🏠", null],
   ["Food", "🍽️", null],
+  ["Groceries", "🛒", null],
   ["Shopping", "🛍️", null],
   ["Transportation", "🚌", null, [["Minibus", "🚐"], ["Trolleybus", "🚎"]]],
   ["Car", "🚗", null, [["Fuel", "⛽"], ["Repairs", "🔧"]]],
   ["Family", "👨‍👩‍👧", null],
+  ["Friends", "🧑‍🤝‍🧑", null],
   ["Health", "🩺", null],
   ["Haircut", "💇", null],
   ["Entertainment", "🎬", null],
