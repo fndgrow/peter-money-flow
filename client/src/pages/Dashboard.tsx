@@ -40,7 +40,9 @@ export function Dashboard() {
   const { state, fmt, fmt2, currency, locale } = useData();
   const today = todayStr();
   const [period, setPeriod] = useState<PeriodKey>("month");
+  const [view, setView] = useState<"overview" | "spending" | "income">("overview");
   const [showTable, setShowTable] = useState(false);
+  const [showIncomeTable, setShowIncomeTable] = useState(false);
   const c = useMemo(() => makeConv(state.settings), [state.settings]);
   const accCur = useMemo(() => new Map(state.accounts.map((a) => [a.id, a.currency || c.main])), [state.accounts, c.main]);
   const inMain = (t: Transaction) => c.conv(t.amount, accCur.get(t.account_id) ?? c.main, c.main);
@@ -196,6 +198,47 @@ export function Dashboard() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [state, range.from, range.to]);
 
+  // Income by source as donut slices (fixed colours by all-time rank).
+  const incomeColor = useMemo(() => {
+    const allTime = new Map<number | null, number>();
+    for (const t of state.transactions) if (t.type === "income") allTime.set(t.category_id, (allTime.get(t.category_id) ?? 0) + inMain(t));
+    const m = new Map<number | null, string>();
+    [...allTime.entries()].sort((a, b) => b[1] - a[1]).slice(0, 7).forEach(([id], i) => m.set(id, SERIES[i]));
+    return m;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [state]);
+  const incomeSlices: Slice[] = useMemo(() => {
+    const named = incomeByCat.filter((r) => incomeColor.has(r.id));
+    const other = incomeByCat.filter((r) => !incomeColor.has(r.id)).reduce((s, r) => s + r.amount, 0);
+    const out: Slice[] = named.map((r) => ({ key: String(r.id), label: `${r.icon} ${r.name}`, value: r.amount, color: incomeColor.get(r.id)! }));
+    if (other > 0) out.push({ key: "other", label: "Other", value: other, color: OTHER_COLOR });
+    return out;
+  }, [incomeByCat, incomeColor]);
+
+  // Income by receiving account, and the biggest single entries in the period.
+  const incomeByAccount = useMemo(() => {
+    const m = new Map<number, number>();
+    for (const t of state.transactions) if (t.type === "income" && inRange(t, range)) m.set(t.account_id, (m.get(t.account_id) ?? 0) + inMain(t));
+    return [...m.entries()]
+      .map(([id, amount]) => ({ id, name: state.accounts.find((a) => a.id === id)?.name ?? "?", amount }))
+      .sort((a, b) => b.amount - a.amount);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [state, range.from, range.to]);
+  const biggest = (type: "income" | "expense") =>
+    state.transactions
+      .filter((t) => t.type === type && inRange(t, range))
+      .map((t) => ({ t, v: inMain(t) }))
+      .sort((a, b) => b.v - a.v)
+      .slice(0, 5);
+  const topIncomes = useMemo(() => biggest("income"), [state, range.from, range.to]); // eslint-disable-line react-hooks/exhaustive-deps
+  const topExpenses = useMemo(() => biggest("expense"), [state, range.from, range.to]); // eslint-disable-line react-hooks/exhaustive-deps
+  const txTitle = (t: Transaction) => {
+    const cat = state.categories.find((x) => x.id === t.category_id);
+    const person = t.person_id ? state.people.find((p) => p.id === t.person_id) : undefined;
+    return t.note || (cat ? `${cat.icon ?? ""} ${cat.name}` : "") || person?.name || "—";
+  };
+  const avgMonthlyIncome = months.length ? months.reduce((s, m) => s + m.income, 0) / Math.max(1, months.filter((m) => m.income > 0).length) : 0;
+
   const delta = (now: number, before: number) => (before > 0 ? Math.round(((now - before) / before) * 100) : null);
   const Delta = ({ now, before, invert }: { now: number; before: number; invert?: boolean }) => {
     const d = delta(now, before);
@@ -223,6 +266,18 @@ export function Dashboard() {
         </Link>
       </div>
 
+      <div className="seg mb">
+        <button className={view === "overview" ? "active" : ""} onClick={() => setView("overview")}>
+          Overview
+        </button>
+        <button className={view === "spending" ? "active out" : ""} onClick={() => setView("spending")}>
+          Spending
+        </button>
+        <button className={view === "income" ? "active in" : ""} onClick={() => setView("income")}>
+          Income
+        </button>
+      </div>
+
       <div className="chips mb">
         {PERIODS.map((p) => (
           <button key={p.key} className={`chip ${period === p.key ? "active" : ""}`} onClick={() => setPeriod(p.key)}>
@@ -237,6 +292,156 @@ export function Dashboard() {
         </div>
       )}
 
+      {view === "income" && (
+        <>
+          <div className="kpis">
+            <div className="kpi">
+              <div className="k">Income</div>
+              <div className="v income">{fmt(income)}</div>
+              {fmt2 && <div className="sub2">≈ {fmt2(income)}</div>}
+              <Delta now={income} before={prevIncome} />
+            </div>
+            <div className="kpi">
+              <div className="k">Sources</div>
+              <div className="v">{incomeByCat.length}</div>
+              <div className="d muted">{incomeByCat[0] ? `${incomeByCat[0].icon} ${incomeByCat[0].name} is the biggest` : "none yet"}</div>
+            </div>
+            <div className="kpi">
+              <div className="k">Average month</div>
+              <div className="v">{fmt(avgMonthlyIncome)}</div>
+              <div className="d muted">over months with income</div>
+            </div>
+            <div className="kpi">
+              <div className="k">Kept of it</div>
+              <div className={`v ${kept < 0 ? "expense" : ""}`}>{rate !== null ? `${rate}%` : "—"}</div>
+              <div className="d muted">{fmt(kept)} after spending</div>
+            </div>
+          </div>
+
+          <div className="card">
+            <div className="card-title">
+              <h2>Where the money came from</h2>
+              <button className="btn ghost sm" onClick={() => setShowIncomeTable((v) => !v)}>
+                {showIncomeTable ? "Chart" : "Table"}
+              </button>
+            </div>
+            {incomeByCat.length === 0 ? (
+              <Empty>No income in this period.</Empty>
+            ) : showIncomeTable ? (
+              <table className="viz-table">
+                <thead>
+                  <tr>
+                    <th>Source</th>
+                    <th>Amount</th>
+                    <th>Share</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {incomeByCat.map((r) => (
+                    <tr key={String(r.id)}>
+                      <td>
+                        {r.icon} {r.name}
+                      </td>
+                      <td>{fmt(r.amount)}</td>
+                      <td>{income ? Math.round((r.amount / income) * 100) : 0}%</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            ) : (
+              <div className="donut-row">
+                <Donut
+                  slices={incomeSlices}
+                  total={income}
+                  format={fmt}
+                  center={
+                    <>
+                      <div className="v">{fmt(income)}</div>
+                      <div className="k">received</div>
+                    </>
+                  }
+                />
+                <Legend items={incomeSlices.map((s) => ({ label: s.label, color: s.color, value: `${income ? Math.round((s.value / income) * 100) : 0}%` }))} />
+              </div>
+            )}
+          </div>
+
+          <div className="card">
+            <div className="card-title">
+              <h2>Income by month</h2>
+            </div>
+            <Bars groups={months.map((m) => ({ label: m.label, values: [m.income] }))} series={[{ name: "Income", color: "var(--s3)" }]} format={fmt} />
+          </div>
+
+          {incomeByAccount.length > 0 && (
+            <div className="card">
+              <div className="card-title">
+                <h2>Received into</h2>
+              </div>
+              <div className="rank">
+                {incomeByAccount.map((r) => (
+                  <Link key={r.id} to={`/transactions?account=${r.id}`} className="rank-row" style={{ color: "inherit" }}>
+                    <span className="n">🏦 {r.name}</span>
+                    <span className="amt">{fmt(r.amount)}</span>
+                    <div className="bar">
+                      <div style={{ width: `${(r.amount / incomeByAccount[0].amount) * 100}%`, background: "var(--s3)" }} />
+                    </div>
+                  </Link>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {topIncomes.length > 0 && (
+            <div className="card">
+              <div className="card-title">
+                <h2>Biggest entries</h2>
+              </div>
+              <div className="rank">
+                {topIncomes.map(({ t, v }) => (
+                  <Link key={t.id} to={`/transactions?month=${t.date.slice(0, 7)}`} className="rank-row" style={{ color: "inherit" }}>
+                    <span className="n">{txTitle(t)}</span>
+                    <span className="amt income">{fmt(v)}</span>
+                    <span className="tiny muted" style={{ gridColumn: "2 / 3" }}>
+                      {formatDate(t.date, locale, { day: "numeric", month: "short", year: "numeric" })}
+                    </span>
+                  </Link>
+                ))}
+              </div>
+            </div>
+          )}
+        </>
+      )}
+
+      {view === "spending" && (
+        <>
+          <div className="kpis">
+            <div className="kpi">
+              <div className="k">Spending</div>
+              <div className="v expense">{fmt(expense)}</div>
+              {fmt2 && <div className="sub2">≈ {fmt2(expense)}</div>}
+              <Delta now={expense} before={prevExpense} invert />
+            </div>
+            <div className="kpi">
+              <div className="k">Per day</div>
+              <div className="v">{fmt(perDay)}</div>
+              <div className="d muted">~{fmt(perDay * 30)} / month at this pace</div>
+            </div>
+            <div className="kpi">
+              <div className="k">Biggest category</div>
+              <div className="v" style={{ fontSize: "1rem" }}>{byCat[0] ? `${byCat[0].icon} ${byCat[0].name}` : "—"}</div>
+              <div className="d muted">{byCat[0] ? `${fmt(byCat[0].amount)} · ${expense ? Math.round((byCat[0].amount / expense) * 100) : 0}%` : ""}</div>
+            </div>
+            <div className="kpi">
+              <div className="k">Of income</div>
+              <div className={`v ${income > 0 && expense > income ? "expense" : ""}`}>{income > 0 ? `${Math.round((expense / income) * 100)}%` : "—"}</div>
+              <div className="d muted">{income > 0 ? (expense > income ? `${fmt(expense - income)} over` : `${fmt(income - expense)} under`) : "no income in period"}</div>
+            </div>
+          </div>
+        </>
+      )}
+
+      {view === "overview" && (
       <div className="kpis">
         <div className="kpi">
           <div className="k">Income</div>
@@ -265,7 +470,9 @@ export function Dashboard() {
           </div>
         </div>
       </div>
+      )}
 
+      {view !== "income" && (
       <div className="card">
         <div className="card-title">
           <h2>Where the money went</h2>
@@ -315,7 +522,9 @@ export function Dashboard() {
           </div>
         )}
       </div>
+      )}
 
+      {view !== "income" && (
       <div className="card">
         <div className="card-title">
           <h2>Top categories</h2>
@@ -342,7 +551,37 @@ export function Dashboard() {
           {byCat.length === 0 && <Empty>Nothing yet.</Empty>}
         </div>
       </div>
+      )}
 
+      {view === "spending" && topExpenses.length > 0 && (
+        <div className="card">
+          <div className="card-title">
+            <h2>Biggest expenses</h2>
+          </div>
+          <div className="rank">
+            {topExpenses.map(({ t, v }) => (
+              <Link key={t.id} to={`/transactions?month=${t.date.slice(0, 7)}`} className="rank-row" style={{ color: "inherit" }}>
+                <span className="n">{txTitle(t)}</span>
+                <span className="amt expense">{fmt(v)}</span>
+                <span className="tiny muted" style={{ gridColumn: "2 / 3" }}>
+                  {formatDate(t.date, locale, { day: "numeric", month: "short", year: "numeric" })}
+                </span>
+              </Link>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {view === "spending" && (
+        <div className="card">
+          <div className="card-title">
+            <h2>Spending by month</h2>
+          </div>
+          <Bars groups={months.map((m) => ({ label: m.label, values: [m.expense] }))} series={[{ name: "Spending", color: "var(--s2)" }]} format={fmt} />
+        </div>
+      )}
+
+      {view === "overview" && (
       <div className="card">
         <div className="card-title">
           <h2>Income vs spending by month</h2>
@@ -357,7 +596,9 @@ export function Dashboard() {
         />
         <Legend items={[{ label: "Income", color: "var(--s3)" }, { label: "Spending", color: "var(--s2)" }]} />
       </div>
+      )}
 
+      {view !== "income" && (
       <div className="card">
         <div className="card-title">
           <h2>Spending per day</h2>
@@ -373,7 +614,9 @@ export function Dashboard() {
           <Bars groups={daily.map((d) => ({ label: d.label.split(" ")[0], values: [d.value], meta: <span className="muted">{d.label}</span> }))} series={[{ name: "Spent", color: "var(--s2)" }]} format={fmt} height={130} />
         )}
       </div>
+      )}
 
+      {view === "overview" && (
       <div className="card">
         <div className="card-title">
           <h2>Total money, last 12 months</h2>
@@ -381,8 +624,9 @@ export function Dashboard() {
         </div>
         <Line points={wealth.map((w) => w.value)} labels={wealth.map((w) => w.label)} format={fmt} color="var(--s1)" />
       </div>
+      )}
 
-      {incomeByCat.length > 0 && (
+      {view === "overview" && incomeByCat.length > 0 && (
         <div className="card">
           <div className="card-title">
             <h2>Income sources</h2>
@@ -406,7 +650,7 @@ export function Dashboard() {
         </div>
       )}
 
-      {people.length > 0 && (
+      {view !== "income" && people.length > 0 && (
         <div className="card">
           <div className="card-title">
             <h2>Paid to people</h2>
