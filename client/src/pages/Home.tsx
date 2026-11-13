@@ -2,10 +2,10 @@ import { useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import { useData } from "../lib/store";
 import { addDays, billPaidMap, billRemaining, daysBetween, formatDate, monthKey, overview, todayStr } from "../lib/money";
-import type { Bill, Transaction, TxType } from "../lib/types";
+import type { Bill, Transaction } from "../lib/types";
 import { TransactionForm } from "../components/TransactionForm";
 import { BillForm, PayBillForm } from "../components/BillForms";
-import { Empty, Money, Sheet } from "../components/ui";
+import { Empty } from "../components/ui";
 import { TxRow } from "./Transactions";
 
 export function Home() {
@@ -14,10 +14,8 @@ export function Home() {
   const rolling = state.settings.savings_mode === "rolling";
   const ov = useMemo(() => overview(state, today), [state, today]);
   const paid = useMemo(() => billPaidMap(state), [state]);
-  const [adding, setAdding] = useState<TxType | null>(null);
   const [editing, setEditing] = useState<Transaction | null>(null);
   const [paying, setPaying] = useState<Bill | null>(null);
-  const [pickBill, setPickBill] = useState(false);
   const [newBill, setNewBill] = useState(false);
 
   const horizon = addDays(today, 30);
@@ -25,7 +23,6 @@ export function Home() {
     .filter((b) => b.status === "open" && b.due_date <= horizon)
     .sort((a, b) => a.due_date.localeCompare(b.due_date))
     .slice(0, 6);
-  const openBills = state.bills.filter((b) => b.status === "open").sort((a, b) => a.due_date.localeCompare(b.due_date));
   const recent = state.transactions.slice(0, 5);
   const month = monthKey(today);
   function personName(id: number | null) {
@@ -92,18 +89,6 @@ export function Home() {
                 : `You are ${fmt(-ov.month.kept)} over this month's income, so savings are covering it.`}
             </div>
           )}
-        </div>
-
-        <div className="quick">
-          <button className="btn in" onClick={() => setAdding("income")}>
-            <span className="big-ic">＋</span>Add income
-          </button>
-          <button className="btn out" onClick={() => setAdding("expense")}>
-            <span className="big-ic">－</span>Add expense
-          </button>
-          <button className="btn pay" onClick={() => (openBills.length ? setPickBill(true) : setNewBill(true))}>
-            <span className="big-ic">✓</span>Record payment
-          </button>
         </div>
 
         <div className="stats">
@@ -184,46 +169,9 @@ export function Home() {
         </div>
       </div>
 
-      {adding && <TransactionForm initialType={adding} onClose={() => setAdding(null)} />}
       {editing && <TransactionForm existing={editing} onClose={() => setEditing(null)} />}
       {paying && <PayBillForm bill={paying} onClose={() => setPaying(null)} />}
       {newBill && <BillForm onClose={() => setNewBill(false)} />}
-      {pickBill && (
-        <Sheet title="Which payment?" onClose={() => setPickBill(false)}>
-          <div className="list">
-            {openBills.map((b) => (
-              <button
-                key={b.id}
-                className="row-item"
-                onClick={() => {
-                  setPickBill(false);
-                  setPaying(b);
-                }}
-              >
-                <div className="ic">👤</div>
-                <div className="body">
-                  <div className="t">{b.title}</div>
-                  <div className="s">
-                    {personName(b.person_id) ? `${personName(b.person_id)} · ` : ""}due {formatDate(b.due_date, locale)}
-                  </div>
-                </div>
-                <div className="amt">
-                  <Money value={billRemaining(b, paid)} currency={b.currency} />
-                </div>
-              </button>
-            ))}
-          </div>
-          <button
-            className="btn block mt"
-            onClick={() => {
-              setPickBill(false);
-              setNewBill(true);
-            }}
-          >
-            + Schedule a new payment
-          </button>
-        </Sheet>
-      )}
     </>
   );
 }

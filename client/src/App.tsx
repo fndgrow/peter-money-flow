@@ -1,8 +1,8 @@
-import { Suspense, lazy, useState } from "react";
-import { NavLink, Navigate, Route, Routes, useLocation } from "react-router-dom";
+import { Suspense, lazy } from "react";
+import { NavLink, Navigate, Route, Routes } from "react-router-dom";
 import { useStore } from "./lib/store";
 import { Icons, Toasts } from "./components/ui";
-import { TransactionForm } from "./components/TransactionForm";
+import { QuickAdd } from "./components/QuickAdd";
 import { Login } from "./pages/Login";
 import { Home } from "./pages/Home";
 import { Transactions } from "./pages/Transactions";
@@ -16,14 +16,12 @@ const Settings = lazy(() => import("./pages/Settings").then((m) => ({ default: m
 const NAV = [
   { to: "/", label: "Home", icon: Icons.home },
   { to: "/people", label: "People", icon: Icons.people },
-  { to: "/accounts", label: "Accounts", icon: Icons.wallet },
   { to: "/dashboard", label: "Dashboard", icon: Icons.chart },
+  { to: "/accounts", label: "Accounts", icon: Icons.wallet },
 ];
 
 export default function App() {
   const { auth, state, loading, offline, live } = useStore();
-  const [quickAdd, setQuickAdd] = useState(false);
-  const location = useLocation();
 
   if (!auth || (auth.authed && loading && !state)) {
     return <div className="spinner" />;
@@ -87,12 +85,7 @@ export default function App() {
           </Routes>
         </Suspense>
       </div>
-      {location.pathname !== "/" && (
-        <button className="fab" aria-label="Add expense or income" onClick={() => setQuickAdd(true)}>
-          +
-        </button>
-      )}
-      {quickAdd && <TransactionForm initialType="expense" onClose={() => setQuickAdd(false)} />}
+      <QuickAdd />
       <Toasts />
     </div>
   );

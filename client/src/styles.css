@@ -367,3 +367,9 @@ table.tbl tr.cur td { font-weight: 800; }
 .cat-list .row-item.static { cursor: default; }
 .cat-list .row-main { display: flex; align-items: center; gap: 12px; flex: 1; min-width: 0; background: none; border: 0; padding: 0; text-align: left; cursor: pointer; color: inherit; font: inherit; }
 .cat-list .row-item.archived .row-main { opacity: 0.5; }
+
+/* ---------- "+" menu ---------- */
+.quick-menu .row-item .ic { font-size: 1.3rem; font-weight: 700; }
+.quick-menu .row-item.in .ic { background: var(--income-soft); color: var(--income); }
+.quick-menu .row-item.out .ic { background: var(--expense-soft); color: var(--expense); }
+.quick-menu .row-item.pay .ic { background: var(--accent-soft); color: var(--accent); }
