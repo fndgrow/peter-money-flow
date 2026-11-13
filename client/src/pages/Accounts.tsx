@@ -8,7 +8,6 @@ import { TransactionForm } from "../components/TransactionForm";
 import { Empty, Money, Progress, Sheet } from "../components/ui";
 import { TxRow } from "./Transactions";
 
-const TYPE_LABEL: Record<Account["type"], string> = { cash: "Cash", bank: "Bank accounts", savings: "Savings" };
 const TYPE_ICON: Record<Account["type"], string> = { cash: "💵", bank: "🏦", savings: "🐷" };
 
 export function Accounts() {
@@ -38,41 +37,36 @@ export function Accounts() {
           </button>
         </div>
 
-        <div className="hero">
-          <div className="label">Total money</div>
-          <div className="big">{fmt(total)}</div>
-          {fmt2 && <div className="sub2">≈ {fmt2(total)}</div>}
-          <div className="row">
-            <div>
-              <div className="v">{fmt(total - savings)}</div>
-              {fmt2 && <div className="sub2">≈ {fmt2(total - savings)}</div>}
-              <div className="k">Spendable</div>
-            </div>
-            <div>
-              <div className="v">{fmt(savings)}</div>
-              {fmt2 && <div className="sub2">≈ {fmt2(savings)}</div>}
-              <div className="k">Savings</div>
+        {active.length > 2 && (
+          <div className="hero">
+            <div className="label">Total money</div>
+            <div className="big">{fmt(total)}</div>
+            {fmt2 && <div className="sub2">≈ {fmt2(total)}</div>}
+            <div className="row">
+              <div>
+                <div className="v">{fmt(total - savings)}</div>
+                {fmt2 && <div className="sub2">≈ {fmt2(total - savings)}</div>}
+                <div className="k">Spendable</div>
+              </div>
+              <div>
+                <div className="v">{fmt(savings)}</div>
+                {fmt2 && <div className="sub2">≈ {fmt2(savings)}</div>}
+                <div className="k">Savings</div>
+              </div>
             </div>
           </div>
-        </div>
+        )}
 
-        {(["bank", "cash", "savings"] as const).map((type) => {
-          const list = active.filter((a) => a.type === type);
-          if (!list.length) return null;
-          return (
-            <div className="card" key={type}>
-              <div className="card-title">
-                <h2>{TYPE_LABEL[type]}</h2>
-                <span className="muted small">{fmt(list.reduce((s, a) => s + inMain(a), 0))}</span>
-              </div>
-              <div className="list">
-                {list.map((a) => (
-                  <AccountRow key={a.id} a={a} balance={balances.get(a.id) ?? 0} onEdit={() => setEditAccount(a)} onOpen={() => setOpen(a)} />
-                ))}
-              </div>
-            </div>
-          );
-        })}
+        <div className="card">
+          <div className="list">
+            {(["cash", "bank", "savings"] as const).flatMap((type) =>
+              active
+                .filter((a) => a.type === type)
+                .map((a) => <AccountRow key={a.id} a={a} balance={balances.get(a.id) ?? 0} onEdit={() => setEditAccount(a)} onOpen={() => setOpen(a)} />),
+            )}
+            {active.length === 0 && <Empty>No accounts yet.</Empty>}
+          </div>
+        </div>
 
         <button className="btn block mb" onClick={() => setEditAccount("new")}>
           + Add account
@@ -165,7 +159,7 @@ function AccountRow({ a, balance, onEdit, onOpen }: { a: Account; balance: numbe
           {a.name} <span className="pill">{a.currency}</span>
         </div>
         <div className="s">
-          Tap for details ·{" "}
+          {a.type === "savings" ? "Savings" : a.type === "cash" ? "Cash" : "Bank"} ·{" "}
           <a
             href="#"
             onClick={(e) => {
