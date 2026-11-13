@@ -198,6 +198,22 @@ export function Dashboard() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [state, range.from, range.to]);
 
+  // Income by company (project) in the period, biggest payer first; income with no company counted separately.
+  const companies = useMemo(() => {
+    const m = new Map<number, number>();
+    let unassigned = 0;
+    for (const t of state.transactions) {
+      if (t.type !== "income" || !inRange(t, range)) continue;
+      if (t.project_id === null) unassigned += inMain(t);
+      else m.set(t.project_id, (m.get(t.project_id) ?? 0) + inMain(t));
+    }
+    const rows = [...m.entries()]
+      .map(([id, amount]) => ({ id, name: state.projects.find((p) => p.id === id)?.name ?? "?", amount }))
+      .sort((a, b) => b.amount - a.amount);
+    return { rows, unassigned };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [state, range.from, range.to]);
+
   // Income by source as donut slices (fixed colours by all-time rank).
   const incomeColor = useMemo(() => {
     const allTime = new Map<number | null, number>();
@@ -362,6 +378,40 @@ export function Dashboard() {
                   }
                 />
                 <Legend items={incomeSlices.map((s) => ({ label: s.label, color: s.color, value: `${income ? Math.round((s.value / income) * 100) : 0}%` }))} />
+              </div>
+            )}
+          </div>
+
+          <div className="card">
+            <div className="card-title">
+              <h2>Income by company</h2>
+            </div>
+            {companies.rows.length === 0 ? (
+              <Empty>No income is linked to a company in this period.</Empty>
+            ) : (
+              <div className="rank">
+                {companies.rows.map((p) => (
+                  <Link key={p.id} to={`/transactions?project=${p.id}`} className="rank-row" style={{ color: "inherit" }}>
+                    <span className="n">🏢 {p.name}</span>
+                    <span className="amt">
+                      {fmt(p.amount)} <span className="muted tiny">{income ? Math.round((p.amount / income) * 100) : 0}%</span>
+                    </span>
+                    <div className="bar">
+                      <div style={{ width: `${(p.amount / companies.rows[0].amount) * 100}%`, background: "var(--income)" }} />
+                    </div>
+                  </Link>
+                ))}
+                {companies.unassigned > 0.004 && (
+                  <div className="rank-row muted">
+                    <span className="n">No company</span>
+                    <span className="amt">
+                      {fmt(companies.unassigned)} <span className="tiny">{income ? Math.round((companies.unassigned / income) * 100) : 0}%</span>
+                    </span>
+                    <div className="bar">
+                      <div style={{ width: `${(companies.unassigned / companies.rows[0].amount) * 100}%`, background: "var(--line)" }} />
+                    </div>
+                  </div>
+                )}
               </div>
             )}
           </div>
