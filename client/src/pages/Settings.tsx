@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState, type FormEvent } from "react";
 import { api } from "../lib/api";
 import { useData } from "../lib/store";
+import { categoryGroups } from "../lib/money";
 import type { Category, Project } from "../lib/types";
 import { CategoryForm, ProjectForm } from "../components/EntityForms";
 import { Field, Sheet } from "../components/ui";
@@ -8,7 +9,8 @@ import { Field, Sheet } from "../components/ui";
 const CURRENCIES = ["EUR", "USD", "GBP", "CHF", "PLN", "CZK", "RON", "MDL", "UAH", "RUB", "TRY", "AED", "ILS", "SEK", "NOK", "DKK", "CAD", "AUD", "JPY", "INR"];
 
 export function Settings() {
-  const { state, run, logout, refresh, toast, currency: mainCurrency } = useData();
+  const { state, run, logout, refresh, toast, currency: mainCurrency, auth, refreshAuth } = useData();
+  const [emailForm, setEmailForm] = useState(false);
   const s = state.settings;
   const [ownerName, setOwnerName] = useState(s.owner_name ?? "");
   const [currency, setCurrency] = useState(s.currency ?? "EUR");
@@ -20,7 +22,7 @@ export function Settings() {
   const [secRate, setSecRate] = useState(s.secondary_rate ?? "");
   const [secDate, setSecDate] = useState(s.secondary_rate_date ?? "");
   const [fetchingRate, setFetchingRate] = useState(false);
-  const [editCat, setEditCat] = useState<{ existing?: Category; kind: "income" | "expense" } | null>(null);
+  const [editCat, setEditCat] = useState<{ existing?: Category; kind: "income" | "expense"; parentId?: number } | null>(null);
   const [editProject, setEditProject] = useState<Project | null | "new">(null);
   const [pwd, setPwd] = useState(false);
   const [showArchivedCats, setShowArchivedCats] = useState(false);
@@ -68,7 +70,7 @@ export function Settings() {
       const r = await api.get<{ rate: number; date: string }>(`/api/rates?base=${mainCurrency}&quote=${secCurrency}`);
       setSecRate(String(Math.round(r.rate * 10000) / 10000));
       setSecDate(r.date);
-      toast(`1 ${secCurrency} = ${r.rate.toFixed(4)} ${mainCurrency} (${r.date}). Press Save to keep it.`);
+      toast(`1 ${mainCurrency} = ${r.rate.toFixed(4)} ${secCurrency} (${r.date}). Press Save to keep it.`);
     } catch (err) {
       toast((err as Error).message, "error");
     } finally {
@@ -163,7 +165,7 @@ export function Settings() {
           </div>
           <p className="small muted mb">The home screen shows the salary as expected until you confirm it arrived. Then the actual amount is added to the account.</p>
           <div className="grid2">
-            <Field label="Usual amount">
+            <Field label={`Usual amount (${state.accounts.find((a) => String(a.id) === salaryAccount)?.currency ?? mainCurrency})`}>
               <input type="number" inputMode="decimal" step="0.01" min="0" value={salaryAmount} onChange={(e) => setSalaryAmount(e.target.value)} placeholder="0" />
             </Field>
             <Field label="Payday (day of month)">
@@ -192,7 +194,7 @@ export function Settings() {
             <h2>Second currency</h2>
           </div>
           <p className="small muted mb">
-            You enter amounts in <b>{mainCurrency}</b>. Pick a second currency and every amount also shows its equivalent, for example MDL and EUR side by side.
+            Totals are shown in <b>{mainCurrency}</b>. Pick a second currency to keep accounts in either one (for example a bank account in MDL and one in EUR) and to see every amount converted, side by side.
           </p>
           <div className="grid2">
             <Field label="Show amounts also in">
@@ -205,7 +207,7 @@ export function Settings() {
                 ))}
               </select>
             </Field>
-            <Field label={secCurrency ? `1 ${secCurrency} = … ${mainCurrency}` : "Exchange rate"} hint={secDate ? `Rate from ${secDate}` : undefined}>
+            <Field label={secCurrency ? `1 ${mainCurrency} = … ${secCurrency}` : "Exchange rate"} hint={secDate ? `Rate from ${secDate}` : undefined}>
               <input type="number" inputMode="decimal" step="0.0001" min="0" value={secRate} onChange={(e) => setSecRate(e.target.value)} disabled={!secCurrency} placeholder="19.40" />
             </Field>
           </div>
@@ -220,7 +222,10 @@ export function Settings() {
         </form>
 
         {(["expense", "income"] as const).map((kind) => {
-          const cats = state.categories.filter((c) => c.kind === kind && (showArchivedCats || !c.archived));
+          const groups = categoryGroups(state.categories, kind, showArchivedCats ? -1 : undefined).filter(
+            (g) => showArchivedCats || !g.parent.archived,
+          );
+          const visible = (c: Category) => showArchivedCats || !c.archived;
           return (
             <div className="card" key={kind}>
               <div className="card-title">
@@ -229,11 +234,23 @@ export function Settings() {
                   + Add
                 </button>
               </div>
-              <div className="chips">
-                {cats.map((c) => (
-                  <button key={c.id} className="chip" style={{ opacity: c.archived ? 0.5 : 1 }} onClick={() => setEditCat({ existing: c, kind })}>
-                    {c.icon} {c.name}
-                  </button>
+              <div className="cat-tree">
+                {groups.map(({ parent, children }) => (
+                  <div key={parent.id} className="cat-row">
+                    <button className="chip" style={{ opacity: parent.archived ? 0.5 : 1 }} onClick={() => setEditCat({ existing: parent, kind })}>
+                      {parent.icon} {parent.name}
+                    </button>
+                    {children.filter(visible).map((c) => (
+                      <button key={c.id} className="chip sub" style={{ opacity: c.archived ? 0.5 : 1 }} onClick={() => setEditCat({ existing: c, kind })}>
+                        {c.icon} {c.name}
+                      </button>
+                    ))}
+                    {kind === "expense" && (
+                      <button className="chip ghost" title={`Add a sub-category under ${parent.name}`} onClick={() => setEditCat({ kind, parentId: parent.id })}>
+                        +
+                      </button>
+                    )}
+                  </div>
                 ))}
               </div>
             </div>
@@ -295,9 +312,15 @@ export function Settings() {
           <div className="card-title">
             <h2>Security</h2>
           </div>
+          <p className="small muted mb">
+            Login email: <b>{auth?.email || "not set"}</b>
+          </p>
           <div className="flex wrap">
             <button className="btn" onClick={() => setPwd(true)}>
               Change password
+            </button>
+            <button className="btn" onClick={() => setEmailForm(true)}>
+              Change email
             </button>
             <button className="btn danger" onClick={logout}>
               Sign out
@@ -306,10 +329,59 @@ export function Settings() {
         </div>
       </div>
 
-      {editCat && <CategoryForm existing={editCat.existing} kind={editCat.kind} onClose={() => setEditCat(null)} />}
+      {editCat && <CategoryForm existing={editCat.existing} kind={editCat.kind} presetParentId={editCat.parentId} onClose={() => setEditCat(null)} />}
       {editProject && <ProjectForm existing={editProject === "new" ? undefined : editProject} onClose={() => setEditProject(null)} />}
       {pwd && <PasswordForm onClose={() => setPwd(false)} />}
+      {emailForm && (
+        <EmailForm
+          current={auth?.email || ""}
+          onClose={() => {
+            setEmailForm(false);
+            refreshAuth();
+          }}
+        />
+      )}
     </>
+  );
+}
+
+function EmailForm({ current, onClose }: { current: string; onClose: () => void }) {
+  const { toast } = useData();
+  const [email, setEmail] = useState(current);
+  const [password, setPassword] = useState("");
+  const [error, setError] = useState("");
+  async function submit(e: FormEvent) {
+    e.preventDefault();
+    try {
+      await api.post("/api/email", { current: password, email });
+      try {
+        localStorage.setItem("pmf_email", email.trim());
+      } catch {
+        /* ignore */
+      }
+      toast("Login email updated");
+      onClose();
+    } catch (err) {
+      setError((err as Error).message);
+    }
+  }
+  return (
+    <Sheet title="Change login email" onClose={onClose}>
+      <form onSubmit={submit}>
+        {error && <div className="form-error">{error}</div>}
+        <Field label="Email">
+          <input type="email" value={email} onChange={(e) => setEmail(e.target.value)} required autoComplete="username" />
+        </Field>
+        <Field label="Current password">
+          <input type="password" value={password} onChange={(e) => setPassword(e.target.value)} required autoComplete="current-password" />
+        </Field>
+        <div className="form-actions">
+          <button className="btn primary" type="submit">
+            Save
+          </button>
+        </div>
+      </form>
+    </Sheet>
   );
 }
 

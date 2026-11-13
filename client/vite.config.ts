@@ -41,6 +41,14 @@ export default defineConfig({
   build: {
     outDir: path.resolve(__dirname, "../dist/client"),
     emptyOutDir: true,
+    target: "es2020",
+    cssCodeSplit: true,
+    rollupOptions: {
+      output: {
+        // Keep React in its own long-cached chunk so app updates stay tiny.
+        manualChunks: { vendor: ["react", "react-dom", "react-router-dom"] },
+      },
+    },
   },
   server: {
     port: 5173,

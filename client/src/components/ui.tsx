@@ -67,14 +67,37 @@ export function Toasts() {
   );
 }
 
-export function Money({ value, signed, className, dual = true }: { value: number; signed?: boolean; className?: string; dual?: boolean }) {
-  const { fmt, fmt2 } = useStore();
+/**
+ * An amount. `currency` is the currency the value is in (defaults to the main currency).
+ * Underneath it shows the equivalent in the other currency when a second currency is configured.
+ */
+export function Money({
+  value,
+  currency: cur,
+  signed,
+  className,
+  dual = true,
+}: {
+  value: number;
+  currency?: string;
+  signed?: boolean;
+  className?: string;
+  dual?: boolean;
+}) {
+  const { fmtIn, conv, currency: main, secondary } = useStore();
+  const c = cur || main;
+  const f = fmtIn(c);
   const cls = signed ? (value < 0 ? "expense" : "income") : "";
-  const text = signed && value > 0 ? `+${fmt(value)}` : fmt(value);
+  const text = signed && value > 0 ? `+${f(value)}` : f(value);
+  let other: string | null = null;
+  if (dual && secondary) {
+    const target = c === main ? secondary.currency : main;
+    if (target !== c) other = fmtIn(target)(conv(value, c, target));
+  }
   return (
     <>
       <span className={`${cls} ${className ?? ""}`}>{text}</span>
-      {dual && fmt2 && <span className="sub">≈ {fmt2(value)}</span>}
+      {other && <span className="sub">≈ {other}</span>}
     </>
   );
 }

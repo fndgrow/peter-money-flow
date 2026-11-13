@@ -9,6 +9,8 @@ export interface Account {
   opening_balance: number;
   archived: number;
   sort: number;
+  /** Currency this account is kept in, e.g. "MDL" or "EUR". */
+  currency: string;
 }
 
 export interface Category {
@@ -19,6 +21,8 @@ export interface Category {
   archived: number;
   sort: number;
   system: string | null;
+  /** Top-level category this one belongs to (one level of nesting), or null. */
+  parent_id: number | null;
 }
 
 export interface Person {
@@ -46,6 +50,8 @@ export interface Bill {
   status: "open" | "paid" | "cancelled";
   note: string | null;
   created_at: string;
+  /** Currency the bill is owed in. */
+  currency: string;
 }
 
 export interface Goal {
@@ -64,6 +70,8 @@ export interface Transaction {
   date: string;
   account_id: number;
   to_account_id: number | null;
+  /** On a transfer between currencies: the amount received in the destination account's currency. */
+  to_amount: number | null;
   category_id: number | null;
   person_id: number | null;
   bill_id: number | null;
@@ -80,7 +88,7 @@ export interface Settings {
   salary_account_id?: string;
   owner_name?: string;
   secondary_currency?: string;
-  /** How many units of the main currency one unit of the secondary currency is worth. */
+  /** How many second-currency units one main unit buys (1 EUR = 20 MDL → "20"). */
   secondary_rate?: string;
   secondary_rate_date?: string;
 }

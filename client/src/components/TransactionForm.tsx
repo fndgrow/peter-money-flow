@@ -1,7 +1,7 @@
 import { useState, type FormEvent } from "react";
 import { api } from "../lib/api";
 import { useData } from "../lib/store";
-import { todayStr } from "../lib/money";
+import { categoryGroups, todayStr } from "../lib/money";
 import type { Transaction, TxType } from "../lib/types";
 import { ConfirmDelete, Field, Segmented, Sheet } from "./ui";
 
@@ -12,13 +12,14 @@ interface Props {
 }
 
 export function TransactionForm({ initialType = "expense", existing, onClose }: Props) {
-  const { state, run, refresh, currency, fmt2, secondary } = useData();
+  const { state, run, refresh, currency: mainCurrency, secondary, fmtIn, conv } = useData();
   const [type, setType] = useState<TxType>(existing?.type ?? initialType);
   const [amount, setAmount] = useState(existing ? String(existing.amount) : "");
   const [date, setDate] = useState(existing?.date ?? todayStr());
   const defaultAccount = state.accounts.find((a) => !a.archived && a.type === "bank") ?? state.accounts.find((a) => !a.archived);
   const [accountId, setAccountId] = useState(String(existing?.account_id ?? defaultAccount?.id ?? ""));
   const [toAccountId, setToAccountId] = useState(String(existing?.to_account_id ?? ""));
+  const [toAmount, setToAmount] = useState(existing?.to_amount != null ? String(existing.to_amount) : "");
   const [categoryId, setCategoryId] = useState(String(existing?.category_id ?? ""));
   const [personId, setPersonId] = useState(String(existing?.person_id ?? ""));
   const [projectId, setProjectId] = useState(String(existing?.project_id ?? ""));
@@ -27,10 +28,16 @@ export function TransactionForm({ initialType = "expense", existing, onClose }: 
   const [error, setError] = useState("");
 
   const accounts = state.accounts.filter((a) => !a.archived || a.id === existing?.account_id || a.id === existing?.to_account_id);
-  const categories = state.categories.filter((c) => c.kind === type && (!c.archived || c.id === existing?.category_id));
   const people = state.people.filter((p) => !p.archived || p.id === existing?.person_id);
   const projects = state.projects.filter((p) => p.status === "active" || p.id === existing?.project_id);
   const isBillPayment = !!existing?.bill_id;
+  // The currency you type in is the currency of the chosen account.
+  const currency = state.accounts.find((a) => String(a.id) === accountId)?.currency || mainCurrency;
+  const toCurrency = state.accounts.find((a) => String(a.id) === toAccountId)?.currency || currency;
+  const crossCurrency = type === "transfer" && toAccountId !== "" && toCurrency !== currency;
+  // The "other" currency you may prefer to type in (main or second), converted into the account's currency.
+  const otherCurrency = secondary ? (currency === mainCurrency ? secondary.currency : mainCurrency) : null;
+  const fmt2 = otherCurrency ? (n: number) => fmtIn(otherCurrency)(conv(n, currency, otherCurrency)) : null;
 
   async function addPerson() {
     const name = window.prompt("Person's name");
@@ -66,6 +73,7 @@ export function TransactionForm({ initialType = "expense", existing, onClose }: 
       date,
       account_id: accountId,
       to_account_id: type === "transfer" ? toAccountId : null,
+      to_amount: crossCurrency ? toAmount || null : null,
       category_id: type === "transfer" ? null : categoryId || null,
       person_id: type === "transfer" ? null : personId || null,
       project_id: type === "transfer" ? null : projectId || null,
@@ -112,8 +120,8 @@ export function TransactionForm({ initialType = "expense", existing, onClose }: 
         <Field label={`Amount (${currency})`} className="amount" hint={fmt2 && Number(amount) > 0 ? `≈ ${fmt2(Number(amount))}` : undefined}>
           <input type="number" inputMode="decimal" step="0.01" min="0" placeholder="0" value={amount} onChange={(e) => setAmount(e.target.value)} autoFocus required />
         </Field>
-        {secondary && (
-          <Field label={`Or type it in ${secondary.currency}`} hint={`Converted at 1 ${secondary.currency} = ${secondary.rate} ${currency}`}>
+        {otherCurrency && !crossCurrency && (
+          <Field label={`Or type it in ${otherCurrency}`} hint={`Converted into ${currency} at today's saved rate`}>
             <input
               type="number"
               inputMode="decimal"
@@ -122,8 +130,21 @@ export function TransactionForm({ initialType = "expense", existing, onClose }: 
               placeholder="0"
               onChange={(e) => {
                 const v = Number(e.target.value);
-                if (v > 0) setAmount(String(Math.round(v * secondary.rate * 100) / 100));
+                if (v > 0) setAmount(String(Math.round(conv(v, otherCurrency, currency) * 100) / 100));
               }}
+            />
+          </Field>
+        )}
+        {crossCurrency && (
+          <Field label={`Amount received (${toCurrency})`} hint={`Sent ${fmtIn(currency)(Number(amount) || 0)} from a ${currency} account into a ${toCurrency} account. Enter what actually arrived.`}>
+            <input
+              type="number"
+              inputMode="decimal"
+              step="0.01"
+              min="0"
+              value={toAmount}
+              placeholder={String(Math.round(conv(Number(amount) || 0, currency, toCurrency) * 100) / 100)}
+              onChange={(e) => setToAmount(e.target.value)}
             />
           </Field>
         )}
@@ -133,7 +154,7 @@ export function TransactionForm({ initialType = "expense", existing, onClose }: 
             <select value={accountId} onChange={(e) => setAccountId(e.target.value)} required>
               {accounts.map((a) => (
                 <option key={a.id} value={a.id}>
-                  {a.name}
+                  {a.name} ({a.currency})
                 </option>
               ))}
             </select>
@@ -146,7 +167,7 @@ export function TransactionForm({ initialType = "expense", existing, onClose }: 
                   .filter((a) => String(a.id) !== accountId)
                   .map((a) => (
                     <option key={a.id} value={a.id}>
-                      {a.name}
+                      {a.name} ({a.currency})
                     </option>
                   ))}
               </select>
@@ -169,12 +190,27 @@ export function TransactionForm({ initialType = "expense", existing, onClose }: 
               <div className="flex">
                 <select className="grow" value={categoryId} onChange={(e) => setCategoryId(e.target.value)} style={{ flex: 1 }}>
                   <option value="">No category</option>
-                  {categories.map((c) => (
-                    <option key={c.id} value={c.id}>
-                      {c.icon ? `${c.icon} ` : ""}
-                      {c.name}
-                    </option>
-                  ))}
+                  {categoryGroups(state.categories, type, existing?.category_id).map(({ parent, children }) =>
+                    children.length === 0 ? (
+                      <option key={parent.id} value={parent.id}>
+                        {parent.icon ? `${parent.icon} ` : ""}
+                        {parent.name}
+                      </option>
+                    ) : (
+                      <optgroup key={parent.id} label={`${parent.icon ?? ""} ${parent.name}`}>
+                        <option value={parent.id}>
+                          {parent.icon ? `${parent.icon} ` : ""}
+                          {parent.name} (general)
+                        </option>
+                        {children.map((c) => (
+                          <option key={c.id} value={c.id}>
+                            {c.icon ? `${c.icon} ` : ""}
+                            {c.name}
+                          </option>
+                        ))}
+                      </optgroup>
+                    ),
+                  )}
                 </select>
                 <button type="button" className="btn sm" onClick={addCategory} title="New category">
                   +

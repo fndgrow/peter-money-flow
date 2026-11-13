@@ -5,14 +5,15 @@ import { accountBalances, daysBetween, formatDate, todayStr } from "../lib/money
 import type { Account, Goal } from "../lib/types";
 import { AccountForm, GoalForm } from "../components/EntityForms";
 import { TransactionForm } from "../components/TransactionForm";
-import { Empty, Progress } from "../components/ui";
+import { Empty, Money, Progress } from "../components/ui";
 
 const TYPE_LABEL: Record<Account["type"], string> = { cash: "Cash", bank: "Bank accounts", savings: "Savings" };
 const TYPE_ICON: Record<Account["type"], string> = { cash: "💵", bank: "🏦", savings: "🐷" };
 
 export function Accounts() {
-  const { state, fmt, fmt2, locale } = useData();
+  const { state, fmt, fmt2, fmtIn, conv, currency, locale } = useData();
   const balances = useMemo(() => accountBalances(state.accounts, state.transactions), [state]);
+  const inMain = (a: Account) => conv(balances.get(a.id) ?? 0, a.currency || currency, currency);
   const [editAccount, setEditAccount] = useState<Account | null | "new">(null);
   const [editGoal, setEditGoal] = useState<Goal | null | "new">(null);
   const [transfer, setTransfer] = useState(false);
@@ -20,8 +21,8 @@ export function Accounts() {
 
   const active = state.accounts.filter((a) => !a.archived);
   const archived = state.accounts.filter((a) => a.archived);
-  const total = active.reduce((s, a) => s + (balances.get(a.id) ?? 0), 0);
-  const savings = active.filter((a) => a.type === "savings").reduce((s, a) => s + (balances.get(a.id) ?? 0), 0);
+  const total = active.reduce((s, a) => s + inMain(a), 0);
+  const savings = active.filter((a) => a.type === "savings").reduce((s, a) => s + inMain(a), 0);
   const today = todayStr();
 
   return (
@@ -59,7 +60,7 @@ export function Accounts() {
             <div className="card" key={type}>
               <div className="card-title">
                 <h2>{TYPE_LABEL[type]}</h2>
-                <span className="muted small">{fmt(list.reduce((s, a) => s + (balances.get(a.id) ?? 0), 0))}</span>
+                <span className="muted small">{fmt(list.reduce((s, a) => s + inMain(a), 0))}</span>
               </div>
               <div className="list">
                 {list.map((a) => (
@@ -87,6 +88,7 @@ export function Accounts() {
             <div className="list">
               {state.goals.map((g) => {
                 const current = g.account_id ? (balances.get(g.account_id) ?? 0) : 0;
+                const gf = fmtIn(state.accounts.find((a) => a.id === g.account_id)?.currency || currency);
                 const pct = g.target_amount > 0 ? Math.min(100, Math.round((current / g.target_amount) * 100)) : 0;
                 const days = g.target_date ? daysBetween(today, g.target_date) : null;
                 const left = Math.max(0, g.target_amount - current);
@@ -96,7 +98,7 @@ export function Accounts() {
                     <div className="between">
                       <div className="t">{g.name}</div>
                       <div className="amt">
-                        {fmt(current)} <span className="muted" style={{ fontWeight: 500 }}>/ {fmt(g.target_amount)}</span>
+                        {gf(current)} <span className="muted" style={{ fontWeight: 500 }}>/ {gf(g.target_amount)}</span>
                       </div>
                     </div>
                     <Progress value={current} max={g.target_amount} good={pct >= 100} />
@@ -104,7 +106,7 @@ export function Accounts() {
                       {pct}% there
                       {pct >= 100 ? " · goal reached 🎉" : ""}
                       {g.target_date && pct < 100 ? ` · by ${formatDate(g.target_date, locale, { day: "numeric", month: "short", year: "numeric" })}` : ""}
-                      {perMonth ? ` · about ${fmt(perMonth)} / month` : ""}
+                      {perMonth ? ` · about ${gf(perMonth)} / month` : ""}
                       {!g.account_id ? " · not linked to an account" : ""}
                     </div>
                   </button>
@@ -138,19 +140,19 @@ export function Accounts() {
 }
 
 function AccountRow({ a, balance, onEdit }: { a: Account; balance: number; onEdit: () => void }) {
-  const { fmt, fmt2 } = useData();
   return (
     <div className="row-item" style={{ cursor: "default" }}>
       <div className="ic">{TYPE_ICON[a.type]}</div>
       <div className="body">
-        <div className="t">{a.name}</div>
+        <div className="t">
+          {a.name} <span className="pill">{a.currency}</span>
+        </div>
         <div className="s">
           <Link to={`/transactions?account=${a.id}`}>Transactions</Link> · <a href="#" onClick={(e) => (e.preventDefault(), onEdit())}>Edit</a>
         </div>
       </div>
       <div className={`amt ${balance < 0 ? "expense" : ""}`}>
-        {fmt(balance)}
-        {fmt2 && <span className="sub">≈ {fmt2(balance)}</span>}
+        <Money value={balance} currency={a.currency} />
       </div>
     </div>
   );

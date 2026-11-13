@@ -5,9 +5,11 @@ import type { Account, AccountType, Category, Goal, Person, Project } from "../l
 import { ConfirmDelete, Field, Sheet } from "./ui";
 
 export function AccountForm({ existing, onClose }: { existing?: Account; onClose: () => void }) {
-  const { run } = useData();
+  const { run, state, currencies, currency: mainCurrency } = useData();
   const [name, setName] = useState(existing?.name ?? "");
   const [type, setType] = useState<AccountType>(existing?.type ?? "bank");
+  const [currency, setCurrency] = useState(existing?.currency ?? mainCurrency);
+  const hasTx = !!existing && state.transactions.some((t) => t.account_id === existing.id || t.to_account_id === existing.id);
   const [opening, setOpening] = useState(existing ? String(existing.opening_balance) : "0");
   const [archived, setArchived] = useState(!!existing?.archived);
   const [busy, setBusy] = useState(false);
@@ -15,7 +17,7 @@ export function AccountForm({ existing, onClose }: { existing?: Account; onClose
   async function submit(e: FormEvent) {
     e.preventDefault();
     setBusy(true);
-    const body = { name, type, opening_balance: opening, archived };
+    const body = { name, type, currency, opening_balance: opening, archived };
     const ok = await run(() => (existing ? api.put(`/api/accounts/${existing.id}`, body) : api.post("/api/accounts", body)), "Saved");
     setBusy(false);
     if (ok) onClose();
@@ -40,10 +42,19 @@ export function AccountForm({ existing, onClose }: { existing?: Account; onClose
               <option value="savings">Savings</option>
             </select>
           </Field>
-          <Field label="Opening balance" hint="Balance before the first transaction you record.">
-            <input type="number" inputMode="decimal" step="0.01" value={opening} onChange={(e) => setOpening(e.target.value)} required />
+          <Field label="Currency" hint={hasTx ? "Cannot change: the account has transactions." : currencies.length === 1 ? "Add a second currency in Settings to keep accounts in MDL and EUR." : undefined}>
+            <select value={currency} onChange={(e) => setCurrency(e.target.value)} disabled={hasTx}>
+              {(currencies.includes(currency) ? currencies : [...currencies, currency]).map((c) => (
+                <option key={c} value={c}>
+                  {c}
+                </option>
+              ))}
+            </select>
           </Field>
         </div>
+        <Field label={`Opening balance (${currency})`} hint="Balance before the first transaction you record.">
+          <input type="number" inputMode="decimal" step="0.01" value={opening} onChange={(e) => setOpening(e.target.value)} required />
+        </Field>
         {existing && (
           <label className="check">
             <input type="checkbox" checked={archived} onChange={(e) => setArchived(e.target.checked)} /> Archived (hidden from totals and forms)
@@ -60,17 +71,30 @@ export function AccountForm({ existing, onClose }: { existing?: Account; onClose
   );
 }
 
-export function CategoryForm({ existing, kind, onClose }: { existing?: Category; kind: "income" | "expense"; onClose: () => void }) {
-  const { run } = useData();
+export function CategoryForm({
+  existing,
+  kind,
+  onClose,
+  presetParentId,
+}: {
+  existing?: Category;
+  kind: "income" | "expense";
+  onClose: () => void;
+  presetParentId?: number | null;
+}) {
+  const { run, state } = useData();
   const [name, setName] = useState(existing?.name ?? "");
   const [icon, setIcon] = useState(existing?.icon ?? "");
+  const [parentId, setParentId] = useState(String(existing?.parent_id ?? presetParentId ?? ""));
   const [archived, setArchived] = useState(!!existing?.archived);
   const [busy, setBusy] = useState(false);
+  const hasChildren = !!existing && state.categories.some((c) => c.parent_id === existing.id);
+  const parents = state.categories.filter((c) => c.kind === kind && c.parent_id === null && !c.archived && c.id !== existing?.id);
 
   async function submit(e: FormEvent) {
     e.preventDefault();
     setBusy(true);
-    const body = { name, icon, kind, archived };
+    const body = { name, icon, kind, archived, parent_id: parentId || null };
     const ok = await run(() => (existing ? api.put(`/api/categories/${existing.id}`, body) : api.post("/api/categories", body)), "Saved");
     setBusy(false);
     if (ok) onClose();
@@ -92,6 +116,18 @@ export function CategoryForm({ existing, kind, onClose }: { existing?: Category;
             <input value={name} onChange={(e) => setName(e.target.value)} required maxLength={60} autoFocus />
           </Field>
         </div>
+        {!hasChildren && (
+          <Field label="Belongs to" hint="Choose a parent to make this a sub-category, like Car › Fuel.">
+            <select value={parentId} onChange={(e) => setParentId(e.target.value)}>
+              <option value="">— top level —</option>
+              {parents.map((p) => (
+                <option key={p.id} value={p.id}>
+                  {p.icon} {p.name}
+                </option>
+              ))}
+            </select>
+          </Field>
+        )}
         {existing && (
           <label className="check">
             <input type="checkbox" checked={archived} onChange={(e) => setArchived(e.target.checked)} /> Archived (hidden when adding new transactions)
@@ -249,7 +285,7 @@ export function GoalForm({ existing, onClose }: { existing?: Goal; onClose: () =
               .filter((a) => !a.archived)
               .map((a) => (
                 <option key={a.id} value={a.id}>
-                  {a.name}
+                  {a.name} ({a.currency})
                 </option>
               ))}
           </select>

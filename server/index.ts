@@ -3,13 +3,16 @@ import cookieParser from "cookie-parser";
 import path from "node:path";
 import fs from "node:fs";
 import { fileURLToPath } from "node:url";
-import { seedDefaults, DB_PATH } from "./db.js";
+import { seedDefaults, fillCurrencies, migrateIncomeCategories, migrateExpenseCategories, DB_PATH } from "./db.js";
 import { api } from "./routes.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const PORT = Number(process.env.PORT || 3000);
 
 seedDefaults();
+fillCurrencies();
+migrateIncomeCategories();
+migrateExpenseCategories();
 
 const app = express();
 app.disable("x-powered-by");
@@ -37,9 +40,16 @@ const clientDir = path.resolve(__dirname, "../client");
 if (fs.existsSync(clientDir)) {
   app.use(
     express.static(clientDir, {
+      etag: true,
+      lastModified: true,
       setHeaders(res, filePath) {
         if (filePath.endsWith("sw.js") || filePath.endsWith("index.html") || filePath.endsWith("manifest.webmanifest")) {
           res.setHeader("Cache-Control", "no-cache");
+        } else if (/[\\/]assets[\\/]/.test(filePath)) {
+          // Hashed file names: safe to cache for a year.
+          res.setHeader("Cache-Control", "public, max-age=31536000, immutable");
+        } else {
+          res.setHeader("Cache-Control", "public, max-age=86400");
         }
       },
     }),

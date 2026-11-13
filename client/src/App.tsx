@@ -1,13 +1,15 @@
+import { Suspense, lazy } from "react";
 import { NavLink, Navigate, Route, Routes } from "react-router-dom";
 import { useStore } from "./lib/store";
 import { Icons, Toasts } from "./components/ui";
 import { Login } from "./pages/Login";
 import { Home } from "./pages/Home";
 import { Transactions } from "./pages/Transactions";
-import { People } from "./pages/People";
-import { Accounts } from "./pages/Accounts";
-import { Reports } from "./pages/Reports";
-import { Settings } from "./pages/Settings";
+// Less-used screens load on demand so the first paint stays small.
+const People = lazy(() => import("./pages/People").then((m) => ({ default: m.People })));
+const Accounts = lazy(() => import("./pages/Accounts").then((m) => ({ default: m.Accounts })));
+const Reports = lazy(() => import("./pages/Reports").then((m) => ({ default: m.Reports })));
+const Settings = lazy(() => import("./pages/Settings").then((m) => ({ default: m.Settings })));
 
 const NAV = [
   { to: "/", label: "Home", icon: Icons.home },
@@ -64,15 +66,17 @@ export default function App() {
       </nav>
       <div className="content">
         {offline && <div className="banner" style={{ margin: "12px 16px 0", maxWidth: 688 }}>Offline. Showing your last synced data. Changes need a connection.</div>}
-        <Routes>
-          <Route path="/" element={<Home />} />
-          <Route path="/transactions" element={<Transactions />} />
-          <Route path="/people" element={<People />} />
-          <Route path="/accounts" element={<Accounts />} />
-          <Route path="/reports" element={<Reports />} />
-          <Route path="/settings" element={<Settings />} />
-          <Route path="*" element={<Navigate to="/" replace />} />
-        </Routes>
+        <Suspense fallback={<div className="spinner" />}>
+          <Routes>
+            <Route path="/" element={<Home />} />
+            <Route path="/transactions" element={<Transactions />} />
+            <Route path="/people" element={<People />} />
+            <Route path="/accounts" element={<Accounts />} />
+            <Route path="/reports" element={<Reports />} />
+            <Route path="/settings" element={<Settings />} />
+            <Route path="*" element={<Navigate to="/" replace />} />
+          </Routes>
+        </Suspense>
       </div>
       <Toasts />
     </div>

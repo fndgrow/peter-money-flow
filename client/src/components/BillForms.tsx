@@ -1,13 +1,14 @@
 import { useState, type FormEvent } from "react";
 import { api } from "../lib/api";
 import { useData } from "../lib/store";
-import { billPaidMap, billRemaining, todayStr } from "../lib/money";
+import { billPaidMap, billRemaining, categoryGroups, todayStr } from "../lib/money";
 import type { Bill, Recurrence } from "../lib/types";
 import { ConfirmDelete, Field, Sheet } from "./ui";
 
 export function BillForm({ existing, onClose, presetPersonId }: { existing?: Bill; onClose: () => void; presetPersonId?: number }) {
-  const { state, run, refresh } = useData();
+  const { state, run, refresh, currencies, currency: mainCurrency } = useData();
   const peopleCat = state.categories.find((c) => c.system === "people");
+  const [currency, setCurrency] = useState(existing?.currency ?? mainCurrency);
   const [title, setTitle] = useState(existing?.title ?? "");
   const [personId, setPersonId] = useState(String(existing?.person_id ?? presetPersonId ?? ""));
   const [categoryId, setCategoryId] = useState(String(existing?.category_id ?? peopleCat?.id ?? ""));
@@ -19,7 +20,6 @@ export function BillForm({ existing, onClose, presetPersonId }: { existing?: Bil
   const [error, setError] = useState("");
 
   const people = state.people.filter((p) => !p.archived || p.id === existing?.person_id);
-  const categories = state.categories.filter((c) => c.kind === "expense" && (!c.archived || c.id === existing?.category_id));
 
   async function addPerson() {
     const name = window.prompt("Person's name");
@@ -37,7 +37,7 @@ export function BillForm({ existing, onClose, presetPersonId }: { existing?: Bil
   async function submit(e: FormEvent) {
     e.preventDefault();
     setBusy(true);
-    const body = { title, person_id: personId || null, category_id: categoryId || null, amount, due_date: dueDate, recurrence, note };
+    const body = { title, person_id: personId || null, category_id: categoryId || null, amount, currency, due_date: dueDate, recurrence, note };
     const ok = await run(
       () => (existing ? api.put(`/api/bills/${existing.id}`, body) : api.post("/api/bills", body)),
       existing ? "Saved" : "Payment scheduled",
@@ -78,10 +78,19 @@ export function BillForm({ existing, onClose, presetPersonId }: { existing?: Bil
           <Field label="Amount" className="amount">
             <input type="number" inputMode="decimal" step="0.01" min="0" value={amount} onChange={(e) => setAmount(e.target.value)} required placeholder="0" />
           </Field>
-          <Field label="Due date">
-            <input type="date" value={dueDate} onChange={(e) => setDueDate(e.target.value)} required />
+          <Field label="Currency">
+            <select value={currency} onChange={(e) => setCurrency(e.target.value)}>
+              {(currencies.includes(currency) ? currencies : [...currencies, currency]).map((c) => (
+                <option key={c} value={c}>
+                  {c}
+                </option>
+              ))}
+            </select>
           </Field>
         </div>
+        <Field label="Due date">
+          <input type="date" value={dueDate} onChange={(e) => setDueDate(e.target.value)} required />
+        </Field>
         <div className="grid2">
           <Field label="Repeats">
             <select value={recurrence} onChange={(e) => setRecurrence(e.target.value as Recurrence)}>
@@ -93,12 +102,27 @@ export function BillForm({ existing, onClose, presetPersonId }: { existing?: Bil
           </Field>
           <Field label="Spending category">
             <select value={categoryId} onChange={(e) => setCategoryId(e.target.value)}>
-              {categories.map((c) => (
-                <option key={c.id} value={c.id}>
-                  {c.icon ? `${c.icon} ` : ""}
-                  {c.name}
-                </option>
-              ))}
+              {categoryGroups(state.categories, "expense", existing?.category_id).map(({ parent, children }) =>
+                children.length === 0 ? (
+                  <option key={parent.id} value={parent.id}>
+                    {parent.icon ? `${parent.icon} ` : ""}
+                    {parent.name}
+                  </option>
+                ) : (
+                  <optgroup key={parent.id} label={`${parent.icon ?? ""} ${parent.name}`}>
+                    <option value={parent.id}>
+                      {parent.icon ? `${parent.icon} ` : ""}
+                      {parent.name} (general)
+                    </option>
+                    {children.map((c) => (
+                      <option key={c.id} value={c.id}>
+                        {c.icon ? `${c.icon} ` : ""}
+                        {c.name}
+                      </option>
+                    ))}
+                  </optgroup>
+                ),
+              )}
             </select>
           </Field>
         </div>
@@ -117,23 +141,34 @@ export function BillForm({ existing, onClose, presetPersonId }: { existing?: Bil
 }
 
 export function PayBillForm({ bill, onClose }: { bill: Bill; onClose: () => void }) {
-  const { state, run, fmt, fmt2, secondary, currency } = useData();
-  const remaining = billRemaining(bill, billPaidMap(state.transactions));
-  const defaultAccount = state.accounts.find((a) => !a.archived && a.type === "bank") ?? state.accounts.find((a) => !a.archived);
-  const [amount, setAmount] = useState(String(remaining));
+  const { state, run, fmtIn, conv, currency: mainCurrency } = useData();
+  const remaining = billRemaining(bill, billPaidMap(state));
+  const billCur = bill.currency || mainCurrency;
+  const fmtBill = fmtIn(billCur);
+  // Prefer an account in the bill's currency.
+  const defaultAccount =
+    state.accounts.find((a) => !a.archived && a.currency === billCur && a.type === "bank") ??
+    state.accounts.find((a) => !a.archived && a.currency === billCur) ??
+    state.accounts.find((a) => !a.archived && a.type === "bank") ??
+    state.accounts.find((a) => !a.archived);
   const [accountId, setAccountId] = useState(String(defaultAccount?.id ?? ""));
+  const currency = state.accounts.find((a) => String(a.id) === accountId)?.currency || mainCurrency;
+  const [amount, setAmount] = useState(String(Math.round(conv(remaining, billCur, defaultAccount?.currency || mainCurrency) * 100) / 100));
+  const fmt = fmtIn(currency);
+  // What this payment is worth in the bill's currency.
+  const paidInBill = conv(Number(amount) || 0, currency, billCur);
   const [date, setDate] = useState(todayStr());
   const [note, setNote] = useState("");
   const [busy, setBusy] = useState(false);
   const person = state.people.find((p) => p.id === bill.person_id);
-  const partial = Number(amount) > 0 && Number(amount) < remaining - 0.004;
+  const partial = paidInBill > 0 && paidInBill < remaining - 0.004;
 
   async function submit(e: FormEvent) {
     e.preventDefault();
     setBusy(true);
     const ok = await run(
       () => api.post(`/api/bills/${bill.id}/payments`, { amount, account_id: accountId, date, note }),
-      partial ? `Recorded. ${fmt(remaining - Number(amount))} still to pay` : "Paid in full",
+      partial ? `Recorded. ${fmtBill(remaining - paidInBill)} still to pay` : "Paid in full",
     );
     setBusy(false);
     if (ok) onClose();
@@ -146,7 +181,7 @@ export function PayBillForm({ bill, onClose }: { bill: Bill; onClose: () => void
           <div className="bold">{bill.title}</div>
           <div className="small muted">
             {person ? `${person.name} · ` : ""}
-            {fmt(bill.amount)} total · <span className="bold">{fmt(remaining)} remaining</span>
+            {fmtBill(bill.amount)} total · <span className="bold">{fmtBill(remaining)} remaining</span>
           </div>
         </div>
         <Field
@@ -154,29 +189,14 @@ export function PayBillForm({ bill, onClose }: { bill: Bill; onClose: () => void
           className="amount"
           hint={
             partial
-              ? `Partial payment. ${fmt(remaining - Number(amount))} will remain.`
-              : fmt2 && Number(amount) > 0
-                ? `≈ ${fmt2(Number(amount))}`
+              ? `Partial payment. ${fmtBill(remaining - paidInBill)} will remain.`
+              : currency !== billCur && Number(amount) > 0
+                ? `≈ ${fmtBill(paidInBill)} of the bill`
                 : undefined
           }
         >
           <input type="number" inputMode="decimal" step="0.01" min="0" value={amount} onChange={(e) => setAmount(e.target.value)} required autoFocus />
         </Field>
-        {secondary && (
-          <Field label={`Or type it in ${secondary.currency}`} hint={`Converted at 1 ${secondary.currency} = ${secondary.rate} ${currency}`}>
-            <input
-              type="number"
-              inputMode="decimal"
-              step="0.01"
-              min="0"
-              placeholder="0"
-              onChange={(e) => {
-                const v = Number(e.target.value);
-                if (v > 0) setAmount(String(Math.round(v * secondary.rate * 100) / 100));
-              }}
-            />
-          </Field>
-        )}
         <div className="grid2">
           <Field label="From account">
             <select value={accountId} onChange={(e) => setAccountId(e.target.value)} required>
@@ -184,7 +204,7 @@ export function PayBillForm({ bill, onClose }: { bill: Bill; onClose: () => void
                 .filter((a) => !a.archived)
                 .map((a) => (
                   <option key={a.id} value={a.id}>
-                    {a.name}
+                    {a.name} ({a.currency})
                   </option>
                 ))}
             </select>
@@ -226,7 +246,7 @@ export function SalaryConfirmForm({ onClose }: { onClose: () => void }) {
   return (
     <Sheet title="Salary arrived" onClose={onClose}>
       <form onSubmit={submit}>
-        <Field label="Actual amount received" className="amount">
+        <Field label={`Actual amount received (${state.accounts.find((a) => String(a.id) === accountId)?.currency ?? ""})`} className="amount">
           <input type="number" inputMode="decimal" step="0.01" min="0" value={amount} onChange={(e) => setAmount(e.target.value)} required autoFocus />
         </Field>
         <div className="grid2">
@@ -236,7 +256,7 @@ export function SalaryConfirmForm({ onClose }: { onClose: () => void }) {
                 .filter((a) => !a.archived)
                 .map((a) => (
                   <option key={a.id} value={a.id}>
-                    {a.name}
+                    {a.name} ({a.currency})
                   </option>
                 ))}
             </select>

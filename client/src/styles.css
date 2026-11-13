@@ -225,6 +225,11 @@ input, select, textarea { font: inherit; color: inherit; }
 .chips { display: flex; gap: 6px; flex-wrap: wrap; }
 .chip { padding: 6px 10px; border-radius: 999px; border: 1px solid var(--line); background: var(--card); font-size: 0.8rem; font-weight: 600; cursor: pointer; }
 .chip.active { background: var(--accent); color: var(--accent-ink); border-color: transparent; }
+.chip.sub { background: var(--card-2); border-color: transparent; font-weight: 500; }
+.chip.ghost { background: transparent; border-style: dashed; color: var(--muted); padding: 6px 9px; }
+.cat-tree { display: flex; flex-direction: column; gap: 8px; }
+.cat-row { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+.cat-row .chip.sub::before { content: "›"; color: var(--muted); margin-right: 4px; }
 
 /* ---------- forms ---------- */
 .field { display: flex; flex-direction: column; gap: 6px; margin-bottom: 12px; }

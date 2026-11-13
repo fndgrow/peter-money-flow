@@ -1,7 +1,7 @@
 import { useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import { useData } from "../lib/store";
-import { categoryTotals, monthKey, monthLabel, monthSummary, projectTotals, shiftMonth } from "../lib/money";
+import { categoryTotals, monthKey, monthLabel, monthSummary, projectTotals, shiftMonth, txInMain } from "../lib/money";
 import { Empty } from "../components/ui";
 
 export function Reports() {
@@ -10,14 +10,27 @@ export function Reports() {
   const [kind, setKind] = useState<"expense" | "income">("expense");
   const cur = monthKey();
 
-  const summary = useMemo(() => monthSummary(state.transactions, state.accounts, month), [state, month]);
-  const prev = useMemo(() => monthSummary(state.transactions, state.accounts, shiftMonth(month, -1)), [state, month]);
+  const summary = useMemo(() => monthSummary(state, month), [state, month]);
+  const prev = useMemo(() => monthSummary(state, shiftMonth(month, -1)), [state, month]);
 
   const byCat = useMemo(() => {
-    const totals = categoryTotals(state.transactions, month, kind);
-    const rows = [...totals.entries()].map(([id, amount]) => {
+    const totals = categoryTotals(state, month, kind);
+    // Roll sub-categories up into their parent, keeping the detail for the sub-line.
+    const byParent = new Map<number | null, { amount: number; children: Map<number, number> }>();
+    for (const [id, amount] of totals) {
       const c = id ? state.categories.find((x) => x.id === id) : undefined;
-      return { id, name: c?.name ?? "Uncategorised", icon: c?.icon ?? "📦", amount };
+      const pid = c?.parent_id ?? id;
+      const e = byParent.get(pid) ?? { amount: 0, children: new Map<number, number>() };
+      e.amount += amount;
+      if (c?.parent_id && id) e.children.set(id, (e.children.get(id) ?? 0) + amount);
+      byParent.set(pid, e);
+    }
+    const rows = [...byParent.entries()].map(([id, e]) => {
+      const c = id ? state.categories.find((x) => x.id === id) : undefined;
+      const detail = [...e.children.entries()]
+        .sort((a, b) => b[1] - a[1])
+        .map(([cid, amt]) => ({ id: cid, name: state.categories.find((x) => x.id === cid)?.name ?? "", icon: state.categories.find((x) => x.id === cid)?.icon ?? "", amount: amt }));
+      return { id, name: c?.name ?? "Uncategorised", icon: c?.icon ?? "📦", amount: e.amount, detail };
     });
     rows.sort((a, b) => b.amount - a.amount);
     const total = rows.reduce((s, r) => s + r.amount, 0);
@@ -28,7 +41,7 @@ export function Reports() {
     const m = new Map<number, number>();
     for (const t of state.transactions) {
       if (t.type !== "expense" || !t.date.startsWith(month) || t.person_id === null) continue;
-      m.set(t.person_id, (m.get(t.person_id) ?? 0) + t.amount);
+      m.set(t.person_id, (m.get(t.person_id) ?? 0) + txInMain(state, t));
     }
     return [...m.entries()]
       .map(([id, amount]) => ({ id, name: state.people.find((p) => p.id === id)?.name ?? "?", amount }))
@@ -39,13 +52,13 @@ export function Reports() {
     const out = [];
     for (let i = 11; i >= 0; i--) {
       const key = shiftMonth(cur, -i);
-      out.push(monthSummary(state.transactions, state.accounts, key));
+      out.push(monthSummary(state, key));
     }
     return out.filter((m, i, arr) => m.income || m.expense || i === arr.length - 1);
   }, [state, cur]);
   const maxBar = Math.max(1, ...months.map((m) => Math.max(m.income, m.expense)));
 
-  const projects = state.projects.map((p) => ({ ...p, ...projectTotals(state.transactions, p.id) }));
+  const projects = state.projects.map((p) => ({ ...p, ...projectTotals(state, p.id) }));
 
   const delta = (a: number, b: number) => {
     if (!b) return null;
@@ -115,6 +128,11 @@ export function Reports() {
               <div className="bar">
                 <div style={{ width: `${byCat.max ? (r.amount / byCat.max) * 100 : 0}%` }} />
               </div>
+              {r.detail.length > 0 && (
+                <div className="tiny muted" style={{ gridColumn: "1 / -1" }}>
+                  {r.detail.map((d) => `${d.icon} ${d.name} ${fmt(d.amount)}`).join(" · ")}
+                </div>
+              )}
             </Link>
           ))
         )}

@@ -14,7 +14,13 @@ import {
   loginLimiter,
   noteFailedLogin,
   clearFailedLogins,
+  userEmail,
+  setUserEmail,
+  normalizeEmail,
+  emailMatches,
 } from "./auth.js";
+
+const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 export const api = Router();
 
@@ -124,11 +130,45 @@ function systemCategory(system: string): number | null {
   return row ? row.id : null;
 }
 
+// ---------- currencies ----------
+
+function currencyCode(v: unknown, field: string, fallback: string): string {
+  if (v === null || v === undefined || v === "") return fallback;
+  const s = String(v).trim().toUpperCase();
+  if (!/^[A-Z]{3}$/.test(s)) throw new HttpError(400, `${field} must be a 3-letter currency code`);
+  return s;
+}
+
+/** Main currency, optional second currency and the rate: how many second-currency units one main unit buys (1 EUR = 20 MDL → 20). */
+function rates() {
+  const s = allSettings();
+  return { main: s.currency || "EUR", secondary: s.secondary_currency || null, rate: Number(s.secondary_rate || 0) || 0 };
+}
+
+/** Convert between the main and the second currency. Unknown currencies are treated 1:1 with main. */
+function convert(amount: number, from: string, to: string): number {
+  if (from === to) return amount;
+  const r = rates();
+  const toMain = (a: number, c: string) => (c === r.main ? a : c === r.secondary && r.rate > 0 ? a / r.rate : a);
+  const fromMain = (a: number, c: string) => (c === r.main ? a : c === r.secondary && r.rate > 0 ? a * r.rate : a);
+  return Math.round(fromMain(toMain(amount, from), to) * 100) / 100;
+}
+
+function accountCurrency(accountId: number): string {
+  const row = db.prepare("SELECT currency FROM accounts WHERE id = ?").get(accountId) as { currency: string | null } | undefined;
+  return row?.currency || rates().main;
+}
+
+/** Amount paid toward a bill, expressed in the bill's currency. */
 function billPaid(billId: number): number {
-  const row = db.prepare("SELECT COALESCE(SUM(amount), 0) AS paid FROM transactions WHERE bill_id = ?").get(billId) as {
-    paid: number;
-  };
-  return row.paid;
+  const bill = db.prepare("SELECT currency FROM bills WHERE id = ?").get(billId) as { currency: string | null } | undefined;
+  const billCur = bill?.currency || rates().main;
+  const rows = db
+    .prepare("SELECT t.amount, a.currency FROM transactions t JOIN accounts a ON a.id = t.account_id WHERE t.bill_id = ?")
+    .all(billId) as { amount: number; currency: string | null }[];
+  let paid = 0;
+  for (const r of rows) paid += convert(r.amount, r.currency || rates().main, billCur);
+  return Math.round(paid * 100) / 100;
 }
 
 /** After a payment is added/removed: close or reopen the bill, spawn next recurrence when fully paid. */
@@ -144,8 +184,8 @@ function syncBillStatus(billId: number) {
     const recurrence = bill.recurrence as string;
     if (recurrence !== "none") {
       db.prepare(
-        `INSERT INTO bills (title, person_id, category_id, amount, due_date, recurrence, status, note, created_at)
-         VALUES (?, ?, ?, ?, ?, ?, 'open', ?, ?)`,
+        `INSERT INTO bills (title, person_id, category_id, amount, due_date, recurrence, status, note, created_at, currency)
+         VALUES (?, ?, ?, ?, ?, ?, 'open', ?, ?, ?)`,
       ).run(
         bill.title as string,
         bill.person_id as number | null,
@@ -155,6 +195,7 @@ function syncBillStatus(billId: number) {
         recurrence,
         bill.note as string | null,
         nowIso(),
+        (bill.currency as string | null) || rates().main,
       );
     }
   } else if (paid < amount - 0.004 && status === "paid") {
@@ -165,16 +206,19 @@ function syncBillStatus(billId: number) {
 // ---------- auth ----------
 
 api.get("/me", (req, res) => {
-  res.json({ setup: hasUser(), authed: isAuthed(req) });
+  const authed = isAuthed(req);
+  res.json({ setup: hasUser(), authed, email: authed ? userEmail() : undefined });
 });
 
 api.post(
   "/setup",
   wrap((req, res) => {
     if (hasUser()) throw new HttpError(400, "Already set up");
+    const email = normalizeEmail(req.body?.email);
+    if (!EMAIL_RE.test(email)) throw new HttpError(400, "Enter a valid email address");
     const password = str(req.body?.password, "Password", { required: true }) as string;
     if (password.length < 6) throw new HttpError(400, "Password must be at least 6 characters");
-    createUser(password);
+    createUser(password, email);
     issueSession(res);
     res.json({ ok: true });
   }),
@@ -184,10 +228,11 @@ api.post(
   "/login",
   loginLimiter,
   wrap((req, res) => {
+    const email = normalizeEmail(req.body?.email);
     const password = String(req.body?.password ?? "");
-    if (!verifyPassword(password)) {
+    if (!emailMatches(email) || !verifyPassword(password)) {
       noteFailedLogin(req);
-      throw new HttpError(401, "Wrong password");
+      throw new HttpError(401, "Wrong email or password");
     }
     clearFailedLogins(req);
     issueSession(res);
@@ -211,6 +256,19 @@ api.post(
     changePassword(next);
     issueSession(res);
     res.json({ ok: true });
+  }),
+);
+
+api.post(
+  "/email",
+  requireAuth,
+  wrap((req, res) => {
+    const current = String(req.body?.current ?? "");
+    const email = normalizeEmail(req.body?.email);
+    if (!verifyPassword(current)) throw new HttpError(400, "Current password is wrong");
+    if (!EMAIL_RE.test(email)) throw new HttpError(400, "Enter a valid email address");
+    setUserEmail(email);
+    res.json({ ok: true, email });
   }),
 );
 
@@ -271,7 +329,7 @@ api.put(
   }),
 );
 
-/** Today's exchange rate: how many units of `base` one unit of `quote` is worth. */
+/** Today's exchange rate: how many units of `quote` one unit of `base` buys (base=EUR, quote=MDL → about 20). */
 api.get(
   "/rates",
   wrap(async (req, res) => {
@@ -280,13 +338,13 @@ api.get(
     if (!/^[A-Z]{3}$/.test(base) || !/^[A-Z]{3}$/.test(quote)) throw new HttpError(400, "Give two currency codes");
     let data: { result?: string; rates?: Record<string, number>; time_last_update_utc?: string };
     try {
-      const r = await fetch(`https://open.er-api.com/v6/latest/${quote}`, { signal: AbortSignal.timeout(8000) });
+      const r = await fetch(`https://open.er-api.com/v6/latest/${base}`, { signal: AbortSignal.timeout(8000) });
       data = (await r.json()) as typeof data;
     } catch {
       throw new HttpError(502, "Could not reach the exchange rate service");
     }
-    const rate = data.rates?.[base];
-    if (data.result !== "success" || !rate) throw new HttpError(502, `No rate for ${quote} to ${base}`);
+    const rate = data.rates?.[quote];
+    if (data.result !== "success" || !rate) throw new HttpError(502, `No rate for ${base} to ${quote}`);
     res.json({ base, quote, rate, date: new Date(data.time_last_update_utc || Date.now()).toISOString().slice(0, 10) });
   }),
 );
@@ -299,9 +357,12 @@ api.post(
     const name = str(req.body?.name, "Name", { required: true, max: 60 });
     const type = oneOf(req.body?.type, "Type", ["cash", "bank", "savings"] as const);
     const opening = num(req.body?.opening_balance, "Opening balance") ?? 0;
+    const currency = currencyCode(req.body?.currency, "Currency", rates().main);
     const r = db
-      .prepare("INSERT INTO accounts (name, type, opening_balance, sort) VALUES (?, ?, ?, (SELECT COALESCE(MAX(sort),0)+1 FROM accounts))")
-      .run(name, type, opening);
+      .prepare(
+        "INSERT INTO accounts (name, type, opening_balance, sort, currency) VALUES (?, ?, ?, (SELECT COALESCE(MAX(sort),0)+1 FROM accounts), ?)",
+      )
+      .run(name, type, opening, currency);
     res.json({ id: Number(r.lastInsertRowid) });
   }),
 );
@@ -315,11 +376,19 @@ api.put(
     const type = oneOf(req.body?.type, "Type", ["cash", "bank", "savings"] as const);
     const opening = num(req.body?.opening_balance, "Opening balance") ?? 0;
     const archived = req.body?.archived ? 1 : 0;
-    db.prepare("UPDATE accounts SET name = ?, type = ?, opening_balance = ?, archived = ? WHERE id = ?").run(
+    const currency = currencyCode(req.body?.currency, "Currency", accountCurrency(accId));
+    if (currency !== accountCurrency(accId)) {
+      const used = db
+        .prepare("SELECT COUNT(*) AS n FROM transactions WHERE account_id = ? OR to_account_id = ?")
+        .get(accId, accId) as { n: number };
+      if (used.n > 0) throw new HttpError(400, "This account already has transactions, so its currency cannot change. Create a new account instead.");
+    }
+    db.prepare("UPDATE accounts SET name = ?, type = ?, opening_balance = ?, archived = ?, currency = ? WHERE id = ?").run(
       name,
       type,
       opening,
       archived,
+      currency,
       accId,
     );
     res.json({ ok: true });
@@ -347,24 +416,43 @@ api.post(
     const name = str(req.body?.name, "Name", { required: true, max: 60 });
     const kind = oneOf(req.body?.kind, "Kind", ["income", "expense"] as const);
     const icon = str(req.body?.icon, "Icon", { max: 8 });
+    const parentId = parentCategory(req.body?.parent_id, kind, null);
     const r = db
       .prepare(
-        "INSERT INTO categories (name, kind, icon, sort) VALUES (?, ?, ?, (SELECT COALESCE(MAX(sort),0)+1 FROM categories WHERE kind = ?))",
+        "INSERT INTO categories (name, kind, icon, sort, parent_id) VALUES (?, ?, ?, (SELECT COALESCE(MAX(sort),0)+1 FROM categories WHERE kind = ?), ?)",
       )
-      .run(name, kind, icon, kind);
+      .run(name, kind, icon, kind, parentId);
     res.json({ id: Number(r.lastInsertRowid) });
   }),
 );
+
+/** Validate a parent category: same kind, top level, not itself. */
+function parentCategory(v: unknown, kind: string, selfId: number | null): number | null {
+  const parentId = id(v, "Parent category", true);
+  if (parentId === null) return null;
+  if (parentId === selfId) throw new HttpError(400, "A category cannot be its own parent");
+  const p = db.prepare("SELECT kind, parent_id FROM categories WHERE id = ?").get(parentId) as { kind: string; parent_id: number | null } | undefined;
+  if (!p) throw new HttpError(400, "Parent category not found");
+  if (p.kind !== kind) throw new HttpError(400, "Parent must be the same kind of category");
+  if (p.parent_id !== null) throw new HttpError(400, "Only one level of sub-categories is supported");
+  return parentId;
+}
 
 api.put(
   "/categories/:id",
   wrap((req, res) => {
     const catId = id(req.params.id, "Category") as number;
-    exists("categories", catId, "Category");
+    const cur = db.prepare("SELECT kind FROM categories WHERE id = ?").get(catId) as { kind: string } | undefined;
+    if (!cur) throw new HttpError(404, "Category not found");
     const name = str(req.body?.name, "Name", { required: true, max: 60 });
     const icon = str(req.body?.icon, "Icon", { max: 8 });
     const archived = req.body?.archived ? 1 : 0;
-    db.prepare("UPDATE categories SET name = ?, icon = ?, archived = ? WHERE id = ?").run(name, icon, archived, catId);
+    const parentId = parentCategory(req.body?.parent_id, cur.kind, catId);
+    if (parentId !== null) {
+      const kids = db.prepare("SELECT COUNT(*) AS n FROM categories WHERE parent_id = ?").get(catId) as { n: number };
+      if (kids.n > 0) throw new HttpError(400, "This category has sub-categories, so it cannot become a sub-category itself");
+    }
+    db.prepare("UPDATE categories SET name = ?, icon = ?, archived = ?, parent_id = ? WHERE id = ?").run(name, icon, archived, parentId, catId);
     res.json({ ok: true });
   }),
 );
@@ -376,6 +464,8 @@ api.delete(
     const row = db.prepare("SELECT system FROM categories WHERE id = ?").get(catId) as { system: string | null } | undefined;
     if (!row) throw new HttpError(404, "Category not found");
     if (row.system) throw new HttpError(400, "This category is used by the app and cannot be deleted. You can rename it.");
+    const kids = db.prepare("SELECT COUNT(*) AS n FROM categories WHERE parent_id = ?").get(catId) as { n: number };
+    if (kids.n > 0) throw new HttpError(400, "Delete or move its sub-categories first.");
     const used = db
       .prepare("SELECT (SELECT COUNT(*) FROM transactions WHERE category_id = ?) + (SELECT COUNT(*) FROM bills WHERE category_id = ?) AS n")
       .get(catId, catId) as { n: number };
@@ -519,7 +609,8 @@ function readBill(body: Record<string, unknown>) {
   const dueDate = dateStr(body.due_date, "Due date") as string;
   const recurrence = oneOf(body.recurrence, "Repeat", ["none", "weekly", "monthly", "yearly"] as const, "none");
   const note = str(body.note, "Note", { max: 500 });
-  return { title, personId, categoryId, amount, dueDate, recurrence, note };
+  const currency = currencyCode(body.currency, "Currency", rates().main);
+  return { title, personId, categoryId, amount, dueDate, recurrence, note, currency };
 }
 
 api.post(
@@ -528,10 +619,10 @@ api.post(
     const b = readBill(req.body ?? {});
     const r = db
       .prepare(
-        `INSERT INTO bills (title, person_id, category_id, amount, due_date, recurrence, status, note, created_at)
-         VALUES (?, ?, ?, ?, ?, ?, 'open', ?, ?)`,
+        `INSERT INTO bills (title, person_id, category_id, amount, due_date, recurrence, status, note, created_at, currency)
+         VALUES (?, ?, ?, ?, ?, ?, 'open', ?, ?, ?)`,
       )
-      .run(b.title, b.personId, b.categoryId, b.amount, b.dueDate, b.recurrence, b.note, nowIso());
+      .run(b.title, b.personId, b.categoryId, b.amount, b.dueDate, b.recurrence, b.note, nowIso(), b.currency);
     res.json({ id: Number(r.lastInsertRowid) });
   }),
 );
@@ -543,8 +634,8 @@ api.put(
     exists("bills", bid, "Bill");
     const b = readBill(req.body ?? {});
     db.prepare(
-      "UPDATE bills SET title = ?, person_id = ?, category_id = ?, amount = ?, due_date = ?, recurrence = ?, note = ? WHERE id = ?",
-    ).run(b.title, b.personId, b.categoryId, b.amount, b.dueDate, b.recurrence, b.note, bid);
+      "UPDATE bills SET title = ?, person_id = ?, category_id = ?, amount = ?, due_date = ?, recurrence = ?, note = ?, currency = ? WHERE id = ?",
+    ).run(b.title, b.personId, b.categoryId, b.amount, b.dueDate, b.recurrence, b.note, b.currency, bid);
     syncBillStatus(bid);
     res.json({ ok: true });
   }),
@@ -572,8 +663,8 @@ api.post(
     if (bill.recurrence === "none") throw new HttpError(400, "This payment does not repeat");
     db.prepare("UPDATE bills SET status = 'cancelled' WHERE id = ?").run(bid);
     db.prepare(
-      `INSERT INTO bills (title, person_id, category_id, amount, due_date, recurrence, status, note, created_at)
-       VALUES (?, ?, ?, ?, ?, ?, 'open', ?, ?)`,
+      `INSERT INTO bills (title, person_id, category_id, amount, due_date, recurrence, status, note, created_at, currency)
+       VALUES (?, ?, ?, ?, ?, ?, 'open', ?, ?, ?)`,
     ).run(
       bill.title as string,
       bill.person_id as number | null,
@@ -583,6 +674,7 @@ api.post(
       bill.recurrence as string,
       bill.note as string | null,
       nowIso(),
+      (bill.currency as string | null) || rates().main,
     );
     res.json({ ok: true });
   }),
@@ -649,7 +741,17 @@ function readTransaction(body: Record<string, unknown>) {
     exists("projects", projectId, "Project");
   }
   const note = str(body.note, "Note", { max: 500 });
-  return { type, amount, date, accountId, toAccountId, categoryId, personId, projectId, note };
+  // Transfer between accounts in different currencies: the amount received on the other side.
+  let toAmount: number | null = null;
+  if (type === "transfer" && toAccountId !== null) {
+    const fromCur = accountCurrency(accountId);
+    const toCur = accountCurrency(toAccountId);
+    if (fromCur !== toCur) {
+      toAmount = num(body.to_amount, "Amount received", { min: 0.01, allowNull: true });
+      if (toAmount === null) toAmount = convert(amount, fromCur, toCur);
+    }
+  }
+  return { type, amount, date, accountId, toAccountId, toAmount, categoryId, personId, projectId, note };
 }
 
 api.post(
@@ -658,10 +760,10 @@ api.post(
     const t = readTransaction(req.body ?? {});
     const r = db
       .prepare(
-        `INSERT INTO transactions (type, amount, date, account_id, to_account_id, category_id, person_id, project_id, note, created_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        `INSERT INTO transactions (type, amount, date, account_id, to_account_id, to_amount, category_id, person_id, project_id, note, created_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       )
-      .run(t.type, t.amount, t.date, t.accountId, t.toAccountId, t.categoryId, t.personId, t.projectId, t.note, nowIso());
+      .run(t.type, t.amount, t.date, t.accountId, t.toAccountId, t.toAmount, t.categoryId, t.personId, t.projectId, t.note, nowIso());
     res.json({ id: Number(r.lastInsertRowid) });
   }),
 );
@@ -675,9 +777,9 @@ api.put(
     const t = readTransaction(req.body ?? {});
     if (existing.bill_id && t.type !== "expense") throw new HttpError(400, "A bill payment must stay an expense");
     db.prepare(
-      `UPDATE transactions SET type = ?, amount = ?, date = ?, account_id = ?, to_account_id = ?, category_id = ?, person_id = ?, project_id = ?, note = ?
+      `UPDATE transactions SET type = ?, amount = ?, date = ?, account_id = ?, to_account_id = ?, to_amount = ?, category_id = ?, person_id = ?, project_id = ?, note = ?
        WHERE id = ?`,
-    ).run(t.type, t.amount, t.date, t.accountId, t.toAccountId, t.categoryId, t.personId, t.projectId, t.note, tid);
+    ).run(t.type, t.amount, t.date, t.accountId, t.toAccountId, t.toAmount, t.categoryId, t.personId, t.projectId, t.note, tid);
     if (existing.bill_id) syncBillStatus(existing.bill_id);
     res.json({ ok: true });
   }),
@@ -772,13 +874,17 @@ api.get(
 
     const wb = new ExcelJS.Workbook();
     wb.creator = "My money";
-    const money = `#,##0.00 "${currency}"`;
+    const money = "#,##0.00";
+    const accCur = (accountId: unknown) => (accounts.find((a) => a.id === accountId)?.currency as string | null) || currency;
+    const toMain = (amount: number, accountId: unknown) => convert(amount, accCur(accountId), currency);
 
     const ws = wb.addWorksheet("Transactions");
     ws.columns = [
       { header: "Date", key: "date", width: 12 },
       { header: "Type", key: "type", width: 10 },
       { header: "Amount", key: "amount", width: 14, style: { numFmt: money } },
+      { header: "Currency", key: "currency", width: 9 },
+      { header: `In ${currency}`, key: "main", width: 14, style: { numFmt: money } },
       { header: "Account", key: "account", width: 18 },
       { header: "To account", key: "to", width: 18 },
       { header: "Category", key: "category", width: 20 },
@@ -791,6 +897,8 @@ api.get(
         date: t.date,
         type: t.type,
         amount: t.type === "expense" ? -(t.amount as number) : (t.amount as number),
+        currency: accCur(t.account_id),
+        main: t.type === "transfer" ? null : (t.type === "expense" ? -1 : 1) * toMain(t.amount as number, t.account_id),
         account: name(accounts, t.account_id),
         to: name(accounts, t.to_account_id),
         category: name(categories, t.category_id),
@@ -808,8 +916,8 @@ api.get(
       if (t.type === "transfer") continue;
       const m = (t.date as string).slice(0, 7);
       const e = months.get(m) ?? { income: 0, expense: 0 };
-      if (t.type === "income") e.income += t.amount as number;
-      else e.expense += t.amount as number;
+      if (t.type === "income") e.income += toMain(t.amount as number, t.account_id);
+      else e.expense += toMain(t.amount as number, t.account_id);
       months.set(m, e);
     }
     const ms = wb.addWorksheet("Monthly summary");
@@ -833,7 +941,7 @@ api.get(
     for (const t of txs) {
       if (t.type === "transfer") continue;
       const key = `${(t.date as string).slice(0, 7)}|${t.type}|${name(categories, t.category_id) || "Uncategorised"}`;
-      byCat.set(key, (byCat.get(key) ?? 0) + (t.amount as number));
+      byCat.set(key, (byCat.get(key) ?? 0) + toMain(t.amount as number, t.account_id));
     }
     [...byCat.entries()].sort().forEach(([k, v]) => {
       const [month, kind, category] = k.split("|");
@@ -847,6 +955,7 @@ api.get(
       { header: "Title", key: "title", width: 24 },
       { header: "Person", key: "person", width: 18 },
       { header: "Category", key: "category", width: 18 },
+      { header: "Currency", key: "currency", width: 9 },
       { header: "Amount", key: "amount", width: 14, style: { numFmt: money } },
       { header: "Paid", key: "paid", width: 14, style: { numFmt: money } },
       { header: "Remaining", key: "remaining", width: 14, style: { numFmt: money } },
@@ -860,6 +969,7 @@ api.get(
         title: b.title,
         person: name(people, b.person_id),
         category: name(categories, b.category_id),
+        currency: (b.currency as string | null) || currency,
         amount: b.amount,
         paid,
         remaining: Math.max(0, (b.amount as number) - paid),
@@ -873,6 +983,7 @@ api.get(
     as.columns = [
       { header: "Account", key: "name", width: 20 },
       { header: "Type", key: "type", width: 10 },
+      { header: "Currency", key: "currency", width: 9 },
       { header: "Opening balance", key: "opening", width: 16, style: { numFmt: money } },
       { header: "Balance", key: "balance", width: 16, style: { numFmt: money } },
     ];
@@ -884,9 +995,9 @@ api.get(
           if (t.type === "income") bal += amt;
           else bal -= amt;
         }
-        if (t.to_account_id === a.id && t.type === "transfer") bal += amt;
+        if (t.to_account_id === a.id && t.type === "transfer") bal += (t.to_amount as number | null) ?? amt;
       }
-      as.addRow({ name: a.name, type: a.type, opening: a.opening_balance, balance: bal });
+      as.addRow({ name: a.name, type: a.type, currency: accCur(a.id), opening: a.opening_balance, balance: bal });
     }
     as.getRow(1).font = { bold: true };
 

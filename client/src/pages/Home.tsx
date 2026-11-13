@@ -9,10 +9,10 @@ import { Empty, Money, Sheet } from "../components/ui";
 import { TxRow } from "./Transactions";
 
 export function Home() {
-  const { state, fmt, fmt2, locale } = useData();
+  const { state, fmt, fmt2, fmtIn, locale } = useData();
   const today = todayStr();
   const ov = useMemo(() => overview(state, today), [state, today]);
-  const paid = useMemo(() => billPaidMap(state.transactions), [state.transactions]);
+  const paid = useMemo(() => billPaidMap(state), [state]);
   const [adding, setAdding] = useState<TxType | null>(null);
   const [editing, setEditing] = useState<Transaction | null>(null);
   const [paying, setPaying] = useState<Bill | null>(null);
@@ -93,14 +93,14 @@ export function Home() {
               <div className="between">
                 <div>
                   <div className="bold">Salary received</div>
-                  <div className="small muted">{fmt(ov.salary.receivedAmount)} this month</div>
+                  <div className="small muted">{fmtIn(ov.salary.currency)(ov.salary.receivedAmount)} this month</div>
                 </div>
                 <span className="pill good">Done</span>
               </div>
             ) : (
               <div className="between">
                 <div>
-                  <div className="bold">Expected salary {fmt(ov.salary.expected)}</div>
+                  <div className="bold">Expected salary {fmtIn(ov.salary.currency)(ov.salary.expected)}</div>
                   <div className="small muted">
                     Usually around the {ov.salary.payday}
                     {ordinal(ov.salary.payday)}. Not counted until you confirm it.
@@ -163,8 +163,8 @@ export function Home() {
                       </div>
                     </div>
                     <div className="amt">
-                      {fmt(rem)}
-                      {rem < b.amount - 0.004 && <span className="sub">of {fmt(b.amount)}</span>}
+                      {fmtIn(b.currency)(rem)}
+                      {rem < b.amount - 0.004 && <span className="sub">of {fmtIn(b.currency)(b.amount)}</span>}
                     </div>
                   </button>
                 );
@@ -217,7 +217,7 @@ export function Home() {
                   </div>
                 </div>
                 <div className="amt">
-                  <Money value={billRemaining(b, paid)} />
+                  <Money value={billRemaining(b, paid)} currency={b.currency} />
                 </div>
               </button>
             ))}

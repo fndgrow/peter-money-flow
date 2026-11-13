@@ -6,6 +6,13 @@ import { Field } from "../components/ui";
 export function Login() {
   const { auth, refreshAuth } = useStore();
   const setup = !auth?.setup;
+  const [email, setEmail] = useState(() => {
+    try {
+      return localStorage.getItem("pmf_email") || "";
+    } catch {
+      return "";
+    }
+  });
   const [password, setPassword] = useState("");
   const [confirm, setConfirm] = useState("");
   const [error, setError] = useState("");
@@ -17,7 +24,12 @@ export function Login() {
     if (setup && password !== confirm) return setError("Passwords do not match");
     setBusy(true);
     try {
-      await api.post(setup ? "/api/setup" : "/api/login", { password });
+      await api.post(setup ? "/api/setup" : "/api/login", { email, password });
+      try {
+        localStorage.setItem("pmf_email", email.trim());
+      } catch {
+        /* private mode */
+      }
       await refreshAuth();
     } catch (err) {
       setError((err as Error).message);
@@ -37,16 +49,19 @@ export function Login() {
         </div>
         <h1 className="center">My money</h1>
         <p className="center muted small mt mb">
-          {setup ? "Welcome. Choose a password to protect your data. There is only one account: yours." : "Enter your password to continue."}
+          {setup ? "Welcome. Choose your login email and a password. There is only one account: yours." : "Sign in to continue."}
         </p>
         <form onSubmit={submit}>
           {error && <div className="form-error">{error}</div>}
+          <Field label="Email">
+            <input type="email" value={email} onChange={(e) => setEmail(e.target.value)} autoFocus={!email} required autoComplete="username" inputMode="email" />
+          </Field>
           <Field label={setup ? "Choose a password" : "Password"}>
             <input
               type="password"
               value={password}
               onChange={(e) => setPassword(e.target.value)}
-              autoFocus
+              autoFocus={!!email}
               required
               minLength={6}
               autoComplete={setup ? "new-password" : "current-password"}

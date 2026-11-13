@@ -1,23 +1,24 @@
 import { useMemo, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import { useData } from "../lib/store";
-import { formatDate, monthKey, monthLabel, shiftMonth } from "../lib/money";
+import { catLabel, categoryGroups, formatDate, monthKey, monthLabel, shiftMonth, txInMain } from "../lib/money";
 import type { Transaction, TxType } from "../lib/types";
 import { TransactionForm } from "../components/TransactionForm";
 import { Empty, Money } from "../components/ui";
 
 export function TxRow({ t, onClick }: { t: Transaction; onClick: () => void }) {
-  const { state, locale } = useData();
+  const { state, locale, fmtIn, currency } = useData();
   const acc = state.accounts.find((a) => a.id === t.account_id);
   const to = t.to_account_id ? state.accounts.find((a) => a.id === t.to_account_id) : undefined;
   const cat = t.category_id ? state.categories.find((c) => c.id === t.category_id) : undefined;
   const person = t.person_id ? state.people.find((p) => p.id === t.person_id) : undefined;
   const project = t.project_id ? state.projects.find((p) => p.id === t.project_id) : undefined;
   const icon = t.type === "transfer" ? "🔁" : (cat?.icon ?? (t.type === "income" ? "➕" : "➖"));
-  const title = t.type === "transfer" ? `${acc?.name ?? "?"} → ${to?.name ?? "?"}` : (t.note || cat?.name || person?.name || (t.type === "income" ? "Income" : "Expense"));
+  const catName = catLabel(state.categories, cat);
+  const title = t.type === "transfer" ? `${acc?.name ?? "?"} → ${to?.name ?? "?"}` : (t.note || catName || person?.name || (t.type === "income" ? "Income" : "Expense"));
   const parts = [formatDate(t.date, locale)];
   if (t.type !== "transfer") {
-    if (t.note && cat) parts.push(cat.name);
+    if (t.note && cat) parts.push(catName);
     if (person) parts.push(person.name);
     if (acc) parts.push(acc.name);
     if (project) parts.push(`📁 ${project.name}`);
@@ -30,7 +31,18 @@ export function TxRow({ t, onClick }: { t: Transaction; onClick: () => void }) {
         <div className="s">{parts.join(" · ")}</div>
       </div>
       <div className="amt">
-        {t.type === "transfer" ? <Money value={t.amount} className="muted" /> : <Money value={t.type === "income" ? t.amount : -t.amount} signed />}
+        {t.type === "transfer" ? (
+          t.to_amount !== null && to && to.currency !== acc?.currency ? (
+            <>
+              <span className="muted">{fmtIn(acc?.currency || currency)(t.amount)}</span>
+              <span className="sub">→ {fmtIn(to.currency)(t.to_amount)}</span>
+            </>
+          ) : (
+            <Money value={t.amount} currency={acc?.currency} className="muted" />
+          )
+        ) : (
+          <Money value={t.type === "income" ? t.amount : -t.amount} currency={acc?.currency} signed />
+        )}
       </div>
     </button>
   );
@@ -59,7 +71,11 @@ export function Transactions() {
       if (!allTime && !t.date.startsWith(month)) return false;
       if (filter !== "all" && t.type !== filter) return false;
       if (accountId && String(t.account_id) !== accountId && String(t.to_account_id) !== accountId) return false;
-      if (categoryId && String(t.category_id) !== categoryId) return false;
+      if (categoryId) {
+        // A parent category also matches its sub-categories.
+        const tc = state.categories.find((c) => c.id === t.category_id);
+        if (String(t.category_id) !== categoryId && String(tc?.parent_id ?? "") !== categoryId) return false;
+      }
       if (personId && String(t.person_id) !== personId) return false;
       if (projectId && String(t.project_id) !== projectId) return false;
       if (needle) {
@@ -75,11 +91,11 @@ export function Transactions() {
   const totals = useMemo(() => {
     let inc = 0, exp = 0;
     for (const t of list) {
-      if (t.type === "income") inc += t.amount;
-      else if (t.type === "expense") exp += t.amount;
+      if (t.type === "income") inc += txInMain(state, t);
+      else if (t.type === "expense") exp += txInMain(state, t);
     }
     return { inc, exp };
-  }, [list]);
+  }, [list, state]);
 
   const groups = useMemo(() => {
     const m = new Map<string, Transaction[]>();
@@ -155,11 +171,18 @@ export function Transactions() {
                 <label>Category</label>
                 <select value={categoryId} onChange={(e) => setCategoryId(e.target.value)}>
                   <option value="">Any</option>
-                  {state.categories.map((c) => (
-                    <option key={c.id} value={c.id}>
-                      {c.name}
-                    </option>
-                  ))}
+                  {(["expense", "income"] as const).flatMap((k) =>
+                    categoryGroups(state.categories, k, -1).flatMap(({ parent, children }) => [
+                      <option key={parent.id} value={parent.id}>
+                        {parent.icon} {parent.name}
+                      </option>,
+                      ...children.map((c) => (
+                        <option key={c.id} value={c.id}>
+                          {"  "}› {c.icon} {c.name}
+                        </option>
+                      )),
+                    ]),
+                  )}
                 </select>
               </div>
               <div className="field">

@@ -11,9 +11,30 @@ export function hasUser(): boolean {
   return !!row;
 }
 
-export function createUser(password: string) {
+export function createUser(password: string, email: string) {
   const hash = bcrypt.hashSync(password, 10);
-  db.prepare("INSERT INTO user (id, password_hash, created_at) VALUES (1, ?, ?)").run(hash, nowIso());
+  db.prepare("INSERT INTO user (id, password_hash, created_at, email) VALUES (1, ?, ?, ?)").run(hash, nowIso(), email);
+}
+
+export function userEmail(): string | null {
+  const row = db.prepare("SELECT email FROM user WHERE id = 1").get() as { email: string | null } | undefined;
+  return row?.email ?? null;
+}
+
+export function setUserEmail(email: string) {
+  db.prepare("UPDATE user SET email = ? WHERE id = 1").run(email);
+}
+
+export function normalizeEmail(v: unknown): string {
+  return String(v ?? "")
+    .trim()
+    .toLowerCase();
+}
+
+/** True when the given email matches the stored one (or none is stored yet). */
+export function emailMatches(email: string): boolean {
+  const stored = userEmail();
+  return !stored || stored.toLowerCase() === email;
 }
 
 export function changePassword(password: string) {

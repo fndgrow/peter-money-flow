@@ -13,9 +13,10 @@ import type { Transaction } from "../lib/types";
 type Tab = "due" | "people" | "history";
 
 export function People() {
-  const { state, fmt, locale, run } = useData();
+  const { state, fmt, fmtIn, conv, currency, locale, run } = useData();
   const today = todayStr();
-  const paid = useMemo(() => billPaidMap(state.transactions), [state.transactions]);
+  const paid = useMemo(() => billPaidMap(state), [state]);
+  const accCur = (accountId: number) => state.accounts.find((a) => a.id === accountId)?.currency || currency;
   const [tab, setTab] = useState<Tab>("due");
   const [newBill, setNewBill] = useState<{ personId?: number } | null>(null);
   const [editBill, setEditBill] = useState<Bill | null>(null);
@@ -29,7 +30,7 @@ export function People() {
   const overdue = open.filter((b) => b.due_date < today);
   const later = open.filter((b) => b.due_date >= today);
   const closed = state.bills.filter((b) => b.status !== "open").sort((a, b) => b.due_date.localeCompare(a.due_date));
-  const totalOwed = open.reduce((s, b) => s + billRemaining(b, paid), 0);
+  const totalOwed = open.reduce((s, b) => s + conv(billRemaining(b, paid), b.currency, currency), 0);
 
   const personStats = useMemo(() => {
     const m = new Map<number, { owed: number; paid: number; count: number }>();
@@ -38,17 +39,18 @@ export function People() {
       if (b.person_id === null) continue;
       const s = m.get(b.person_id);
       if (!s) continue;
-      if (b.status === "open") s.owed += billRemaining(b, paid);
+      if (b.status === "open") s.owed += conv(billRemaining(b, paid), b.currency, currency);
     }
     for (const t of state.transactions) {
       if (t.person_id === null || t.type !== "expense") continue;
       const s = m.get(t.person_id);
       if (!s) continue;
-      s.paid += t.amount;
+      s.paid += conv(t.amount, accCur(t.account_id), currency);
       s.count += 1;
     }
     return m;
-  }, [state, paid]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [state, paid, currency]);
 
   function personName(id: number | null) {
     return id ? state.people.find((p) => p.id === id)?.name : undefined;
@@ -83,8 +85,8 @@ export function People() {
           )}
         </div>
         <div className="amt">
-          {b.status === "open" ? fmt(rem) : fmt(b.amount)}
-          {b.status === "open" && rem < b.amount - 0.004 && <span className="sub">of {fmt(b.amount)}</span>}
+          {b.status === "open" ? fmtIn(b.currency)(rem) : fmtIn(b.currency)(b.amount)}
+          {b.status === "open" && rem < b.amount - 0.004 && <span className="sub">of {fmtIn(b.currency)(b.amount)}</span>}
         </div>
       </button>
     );
@@ -222,15 +224,15 @@ export function People() {
           <div className="card flat">
             <div className="between">
               <span className="muted">Amount</span>
-              <Money value={billMenu.amount} />
+              <Money value={billMenu.amount} currency={billMenu.currency} />
             </div>
             <div className="between">
               <span className="muted">Paid so far</span>
-              <Money value={paid.get(billMenu.id) ?? 0} />
+              <Money value={paid.get(billMenu.id) ?? 0} currency={billMenu.currency} />
             </div>
             <div className="between bold">
               <span>Remaining</span>
-              <Money value={billRemaining(billMenu, paid)} />
+              <Money value={billRemaining(billMenu, paid)} currency={billMenu.currency} />
             </div>
             <div className="between">
               <span className="muted">Due</span>

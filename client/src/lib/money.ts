@@ -1,4 +1,18 @@
-import type { Account, AppState, Bill, Transaction } from "./types";
+import type { Account, AppState, Bill, Category, Settings, Transaction } from "./types";
+
+/** "Car › Fuel" for a sub-category, "Car" for a top-level one. */
+export function catLabel(categories: Category[], c: Category | undefined | null): string {
+  if (!c) return "";
+  const parent = c.parent_id ? categories.find((p) => p.id === c.parent_id) : undefined;
+  return parent ? `${parent.name} › ${c.name}` : c.name;
+}
+
+/** Categories of one kind as [parent, children[]] groups, in display order. Archived ones are skipped unless `keepId` matches. */
+export function categoryGroups(categories: Category[], kind: "income" | "expense", keepId?: number | null) {
+  const ok = (c: Category) => c.kind === kind && (!c.archived || c.id === keepId);
+  const parents = categories.filter((c) => ok(c) && c.parent_id === null);
+  return parents.map((p) => ({ parent: p, children: categories.filter((c) => ok(c) && c.parent_id === p.id) }));
+}
 
 export function todayStr(): string {
   const d = new Date();
@@ -51,7 +65,32 @@ export function makeFormatter(currency = "EUR", locale = "en-GB") {
   return (n: number) => fmt.format(Math.round(n * 100) / 100);
 }
 
-/** Current balance of every account (opening balance + all transactions). */
+// ---------- currencies ----------
+
+export interface Conv {
+  main: string;
+  secondary: string | null;
+  /** How many second-currency units one main unit buys (1 EUR = 20 MDL → 20). */
+  rate: number;
+  /** Convert between the main and the second currency. Unknown currencies count 1:1 with main. */
+  conv: (amount: number, from: string, to: string) => number;
+}
+
+export function makeConv(settings: Settings): Conv {
+  const main = settings.currency || "EUR";
+  const secondary = settings.secondary_currency && settings.secondary_currency !== main ? settings.secondary_currency : null;
+  const rate = Number(settings.secondary_rate || 0) || 0;
+  const toMain = (a: number, c: string) => (c === main ? a : c === secondary && rate > 0 ? a / rate : a);
+  const fromMain = (a: number, c: string) => (c === main ? a : c === secondary && rate > 0 ? a * rate : a);
+  const conv = (amount: number, from: string, to: string) => (from === to ? amount : fromMain(toMain(amount, from), to));
+  return { main, secondary, rate, conv };
+}
+
+function accountCurrencyMap(accounts: Account[], main: string): Map<number, string> {
+  return new Map(accounts.map((a) => [a.id, a.currency || main]));
+}
+
+/** Current balance of every account, in that account's own currency. */
 export function accountBalances(accounts: Account[], transactions: Transaction[]): Map<number, number> {
   const bal = new Map<number, number>();
   for (const a of accounts) bal.set(a.id, a.opening_balance);
@@ -60,16 +99,22 @@ export function accountBalances(accounts: Account[], transactions: Transaction[]
     else if (t.type === "expense") bal.set(t.account_id, (bal.get(t.account_id) ?? 0) - t.amount);
     else {
       bal.set(t.account_id, (bal.get(t.account_id) ?? 0) - t.amount);
-      if (t.to_account_id !== null) bal.set(t.to_account_id, (bal.get(t.to_account_id) ?? 0) + t.amount);
+      if (t.to_account_id !== null) bal.set(t.to_account_id, (bal.get(t.to_account_id) ?? 0) + (t.to_amount ?? t.amount));
     }
   }
   return bal;
 }
 
-export function billPaidMap(transactions: Transaction[]): Map<number, number> {
+/** Amount paid toward each bill, in the bill's currency. */
+export function billPaidMap(state: AppState): Map<number, number> {
+  const c = makeConv(state.settings);
+  const accCur = accountCurrencyMap(state.accounts, c.main);
+  const billCur = new Map(state.bills.map((b) => [b.id, b.currency || c.main]));
   const paid = new Map<number, number>();
-  for (const t of transactions) {
-    if (t.bill_id !== null) paid.set(t.bill_id, (paid.get(t.bill_id) ?? 0) + t.amount);
+  for (const t of state.transactions) {
+    if (t.bill_id === null) continue;
+    const amt = c.conv(t.amount, accCur.get(t.account_id) ?? c.main, billCur.get(t.bill_id) ?? c.main);
+    paid.set(t.bill_id, (paid.get(t.bill_id) ?? 0) + amt);
   }
   return paid;
 }
@@ -86,14 +131,18 @@ export interface MonthSummary {
   toSavings: number;
 }
 
-export function monthSummary(transactions: Transaction[], accounts: Account[], month: string): MonthSummary {
-  const savingsIds = new Set(accounts.filter((a) => a.type === "savings").map((a) => a.id));
+/** Income, spending and what was kept in a month, all in the main currency. */
+export function monthSummary(state: AppState, month: string): MonthSummary {
+  const c = makeConv(state.settings);
+  const accCur = accountCurrencyMap(state.accounts, c.main);
+  const savingsIds = new Set(state.accounts.filter((a) => a.type === "savings").map((a) => a.id));
   let income = 0, expense = 0, toSavings = 0;
-  for (const t of transactions) {
+  for (const t of state.transactions) {
     if (!t.date.startsWith(month)) continue;
-    if (t.type === "income") income += t.amount;
-    else if (t.type === "expense") expense += t.amount;
-    else if (t.to_account_id !== null && savingsIds.has(t.to_account_id) && !savingsIds.has(t.account_id)) toSavings += t.amount;
+    const inMain = c.conv(t.amount, accCur.get(t.account_id) ?? c.main, c.main);
+    if (t.type === "income") income += inMain;
+    else if (t.type === "expense") expense += inMain;
+    else if (t.to_account_id !== null && savingsIds.has(t.to_account_id) && !savingsIds.has(t.account_id)) toSavings += inMain;
   }
   return { month, income, expense, kept: income - expense, toSavings };
 }
@@ -107,44 +156,49 @@ export interface Overview {
   overdueCount: number;
   available: number; // spendable - owedSoon
   month: MonthSummary;
-  salary: { expected: number; payday: number; accountId: number | null; received: boolean; receivedAmount: number } | null;
+  salary: { expected: number; currency: string; payday: number; accountId: number | null; received: boolean; receivedAmount: number } | null;
 }
 
+/** Everything on the home screen, in the main currency. */
 export function overview(state: AppState, today = todayStr()): Overview {
+  const c = makeConv(state.settings);
   const active = state.accounts.filter((a) => !a.archived);
   const balances = accountBalances(active, state.transactions);
   let spendable = 0, savings = 0;
   for (const a of active) {
-    const b = balances.get(a.id) ?? 0;
+    const b = c.conv(balances.get(a.id) ?? 0, a.currency || c.main, c.main);
     if (a.type === "savings") savings += b;
     else spendable += b;
   }
-  const paid = billPaidMap(state.transactions);
+  const paid = billPaidMap(state);
   const month = monthKey(today);
   const end = monthEnd(month);
   let owedSoon = 0, owedTotal = 0, overdueCount = 0;
   for (const b of state.bills) {
     if (b.status !== "open") continue;
-    const rem = billRemaining(b, paid);
+    const rem = c.conv(billRemaining(b, paid), b.currency || c.main, c.main);
     owedTotal += rem;
     if (b.due_date <= end) owedSoon += rem;
     if (b.due_date < today && rem > 0) overdueCount += 1;
   }
-  const ms = monthSummary(state.transactions, active, month);
+  const ms = monthSummary(state, month);
 
   let salary: Overview["salary"] = null;
   const expected = Number(state.settings.salary_amount || 0);
   if (expected > 0) {
-    const salaryCat = state.categories.find((c) => c.system === "salary");
+    const salaryCat = state.categories.find((cat) => cat.system === "salary");
+    const accountId = state.settings.salary_account_id ? Number(state.settings.salary_account_id) : null;
+    const salaryAccount = accountId ? state.accounts.find((a) => a.id === accountId) : undefined;
     const received = state.transactions.filter(
       (t) => t.type === "income" && t.date.startsWith(month) && salaryCat && t.category_id === salaryCat.id,
     );
     salary = {
       expected,
+      currency: salaryAccount?.currency || c.main,
       payday: Number(state.settings.salary_payday || 25),
-      accountId: state.settings.salary_account_id ? Number(state.settings.salary_account_id) : null,
+      accountId,
       received: received.length > 0,
-      receivedAmount: received.reduce((s, t) => s + t.amount, 0),
+      receivedAmount: received.reduce((s, t) => s + c.conv(t.amount, state.accounts.find((a) => a.id === t.account_id)?.currency || c.main, salaryAccount?.currency || c.main), 0),
     };
   }
 
@@ -161,21 +215,35 @@ export function overview(state: AppState, today = todayStr()): Overview {
   };
 }
 
-export function categoryTotals(transactions: Transaction[], month: string, type: "income" | "expense"): Map<number | null, number> {
+/** Totals per category for a month, in the main currency. */
+export function categoryTotals(state: AppState, month: string, type: "income" | "expense"): Map<number | null, number> {
+  const c = makeConv(state.settings);
+  const accCur = accountCurrencyMap(state.accounts, c.main);
   const out = new Map<number | null, number>();
-  for (const t of transactions) {
+  for (const t of state.transactions) {
     if (t.type !== type || !t.date.startsWith(month)) continue;
-    out.set(t.category_id, (out.get(t.category_id) ?? 0) + t.amount);
+    out.set(t.category_id, (out.get(t.category_id) ?? 0) + c.conv(t.amount, accCur.get(t.account_id) ?? c.main, c.main));
   }
   return out;
 }
 
-export function projectTotals(transactions: Transaction[], projectId: number) {
+/** Income, costs and profit of a project, in the main currency. */
+export function projectTotals(state: AppState, projectId: number) {
+  const c = makeConv(state.settings);
+  const accCur = accountCurrencyMap(state.accounts, c.main);
   let income = 0, cost = 0;
-  for (const t of transactions) {
+  for (const t of state.transactions) {
     if (t.project_id !== projectId) continue;
-    if (t.type === "income") income += t.amount;
-    else if (t.type === "expense") cost += t.amount;
+    const inMain = c.conv(t.amount, accCur.get(t.account_id) ?? c.main, c.main);
+    if (t.type === "income") income += inMain;
+    else if (t.type === "expense") cost += inMain;
   }
   return { income, cost, profit: income - cost };
+}
+
+/** Amount of a transaction expressed in the main currency. */
+export function txInMain(state: AppState, t: Transaction): number {
+  const c = makeConv(state.settings);
+  const cur = state.accounts.find((a) => a.id === t.account_id)?.currency || c.main;
+  return c.conv(t.amount, cur, c.main);
 }

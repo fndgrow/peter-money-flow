@@ -1,9 +1,9 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { api, ApiError } from "./api";
 import type { AppState } from "./types";
-import { makeFormatter } from "./money";
+import { makeConv, makeFormatter } from "./money";
 
-type Auth = { setup: boolean; authed: boolean };
+type Auth = { setup: boolean; authed: boolean; email?: string | null };
 
 interface Toast {
   id: number;
@@ -20,6 +20,12 @@ interface Store {
   /** Formats the amount in the secondary currency, or null when none is set. */
   fmt2: ((n: number) => string) | null;
   secondary: { currency: string; rate: number } | null;
+  /** Formatter for any currency code (cached). */
+  fmtIn: (currency: string) => (n: number) => string;
+  /** Convert between the main and the second currency. */
+  conv: (amount: number, from: string, to: string) => number;
+  /** Currencies an account can be kept in: main first, then the second currency if set. */
+  currencies: string[];
   locale: string;
   currency: string;
   refresh: () => Promise<void>;
@@ -133,10 +139,42 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   const fmt2 = useMemo(() => {
     if (!secondary) return null;
     const f = makeFormatter(secondary.currency, locale);
-    return (n: number) => f(n / secondary.rate);
+    return (n: number) => f(n * secondary.rate);
   }, [secondary, locale]);
+  const fmtIn = useMemo(() => {
+    const cache = new Map<string, (n: number) => string>();
+    return (cur: string) => {
+      let f = cache.get(cur);
+      if (!f) {
+        f = makeFormatter(cur || currency, locale);
+        cache.set(cur, f);
+      }
+      return f;
+    };
+  }, [currency, locale]);
+  const conv = useMemo(() => makeConv(state?.settings ?? {}).conv, [state?.settings]);
+  const currencies = useMemo(() => (secondary ? [currency, secondary.currency] : [currency]), [currency, secondary]);
 
-  const value: Store = { auth, state, loading, offline, fmt, fmt2, secondary, locale, currency, refresh, refreshAuth, logout, toast, toasts, run };
+  const value: Store = {
+    auth,
+    state,
+    loading,
+    offline,
+    fmt,
+    fmt2,
+    secondary,
+    fmtIn,
+    conv,
+    currencies,
+    locale,
+    currency,
+    refresh,
+    refreshAuth,
+    logout,
+    toast,
+    toasts,
+    run,
+  };
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;
 }
 
