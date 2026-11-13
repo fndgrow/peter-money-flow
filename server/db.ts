@@ -201,6 +201,8 @@ const DEFAULT_EXPENSE: ExpenseDef[] = [
   ["Education", "📚", null],
   ["Hobbies", "🎨", null],
   ["Fishing", "🎣", null],
+  ["Bath or sauna", "🧖", null],
+  ["Swimming pool", "🏊", null],
   ["Subscriptions", "📺", null, [["Personal", "👤"], ["For the company", "🏢"]]],
   ["Travel", "✈️", null],
   ["For God", "🙏", null],
