@@ -1,5 +1,5 @@
 import { useMemo, useState } from "react";
-import { useSearchParams } from "react-router-dom";
+import { Link, useSearchParams } from "react-router-dom";
 import { useData } from "../lib/store";
 import { catLabel, categoryGroups, formatDate, monthKey, monthLabel, shiftMonth, txInMain } from "../lib/money";
 import type { Transaction, TxType } from "../lib/types";
@@ -121,7 +121,12 @@ export function Transactions() {
     <>
       <div className="main">
         <div className="between mb">
-          <h1>Transactions</h1>
+          <div>
+            <h1>Transactions</h1>
+            <Link to="/" className="small">
+              ‹ Back to home
+            </Link>
+          </div>
           <button className="btn primary sm" onClick={() => setAdding(true)}>
             + Add
           </button>

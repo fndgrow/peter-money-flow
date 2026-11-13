@@ -14,7 +14,6 @@ const Settings = lazy(() => import("./pages/Settings").then((m) => ({ default: m
 
 const NAV = [
   { to: "/", label: "Home", icon: Icons.home },
-  { to: "/transactions", label: "Transactions", icon: Icons.list },
   { to: "/people", label: "People", icon: Icons.people },
   { to: "/accounts", label: "Accounts", icon: Icons.wallet },
   { to: "/dashboard", label: "Dashboard", icon: Icons.chart },
