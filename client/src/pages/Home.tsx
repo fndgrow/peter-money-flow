@@ -38,28 +38,12 @@ export function Home() {
   const openBills = state.bills.filter((b) => b.status === "open").sort((a, b) => a.due_date.localeCompare(b.due_date));
   const recent = state.transactions.slice(0, 5);
   const month = monthKey(today);
-  const name = state.settings.owner_name;
-  const hour = new Date().getHours();
-  const greeting = hour < 12 ? "Good morning" : hour < 18 ? "Good afternoon" : "Good evening";
-
   function personName(id: number | null) {
     return id ? state.people.find((p) => p.id === id)?.name : undefined;
   }
 
   return (
     <>
-      <div className="main">
-        <div className="between mb">
-          <div>
-            <div className="muted small">
-              {greeting}
-              {name ? `, ${name}` : ""}
-            </div>
-            <h1>{monthLabel(month, locale)}</h1>
-          </div>
-          <Link to="/settings" className="btn ghost sm">
-            Settings
-          </Link>
         </div>
 
         <div className="hero">
