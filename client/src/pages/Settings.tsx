@@ -22,6 +22,7 @@ export function Settings() {
   const [secRate, setSecRate] = useState(s.secondary_rate ?? "");
   const [secDate, setSecDate] = useState(s.secondary_rate_date ?? "");
   const [secManual, setSecManual] = useState(s.secondary_rate_manual === "1");
+  const [savingsMode, setSavingsMode] = useState<"rolling" | "accounts">(s.savings_mode === "rolling" ? "rolling" : "accounts");
   const [sweepOn, setSweepOn] = useState(s.sweep_enabled === "1");
   const [sweepFrom, setSweepFrom] = useState(s.sweep_from_account_id ?? "");
   const [sweepTo, setSweepTo] = useState(s.sweep_to_account_id ?? "");
@@ -69,11 +70,21 @@ export function Settings() {
 
   async function saveSweep(e: FormEvent) {
     e.preventDefault();
+    if (savingsMode === "rolling") {
+      await run(() => api.put("/api/settings", { savings_mode: "rolling", sweep_enabled: "" }), "Savings: single pot");
+      return;
+    }
     if (sweepOn && (!sweepFrom || !sweepTo)) return toast("Choose both accounts", "error");
     if (sweepOn && sweepFrom === sweepTo) return toast("Choose two different accounts", "error");
     await run(
-      () => api.put("/api/settings", { sweep_enabled: sweepOn ? "1" : "", sweep_from_account_id: sweepFrom, sweep_to_account_id: sweepTo }),
-      sweepOn ? "Month close is on" : "Month close is off",
+      () =>
+        api.put("/api/settings", {
+          savings_mode: "accounts",
+          sweep_enabled: sweepOn ? "1" : "",
+          sweep_from_account_id: sweepFrom,
+          sweep_to_account_id: sweepTo,
+        }),
+      sweepOn ? "Month close is on" : "Saved",
     );
   }
 
@@ -205,14 +216,25 @@ export function Settings() {
 
         <form className="card" onSubmit={saveSweep}>
           <div className="card-title">
-            <h2>Month close → savings</h2>
+            <h2>Savings</h2>
           </div>
-          <p className="small muted mb">
-            On the 1st of each month the app looks at the month that just ended. What you kept (income minus spending) moves from your bank account into savings.
-            If you spent more than you earned, the shortfall comes back from savings. You can also close a month early from the home screen.
-          </p>
+          <label className="check" style={{ alignItems: "flex-start" }}>
+            <input type="radio" name="savings_mode" checked={savingsMode === "rolling"} onChange={() => setSavingsMode("rolling")} />
+            <span>
+              <b>One pot.</b> All my money is in one place. What is left at the end of the month is my savings; if I overspend, it comes out of savings.
+              Home shows “Savings (before this month)” and “This month so far”.
+            </span>
+          </label>
+          <label className="check" style={{ alignItems: "flex-start" }}>
+            <input type="radio" name="savings_mode" checked={savingsMode === "accounts"} onChange={() => setSavingsMode("accounts")} />
+            <span>
+              <b>Separate savings account.</b> On the 1st of each month, what I kept moves from my bank account into a savings account; a shortfall comes back.
+            </span>
+          </label>
+          {savingsMode === "accounts" && (
+          <>
           <label className="check">
-            <input type="checkbox" checked={sweepOn} onChange={(e) => setSweepOn(e.target.checked)} /> Move what I keep each month into savings
+            <input type="checkbox" checked={sweepOn} onChange={(e) => setSweepOn(e.target.checked)} /> Move what I keep each month automatically
           </label>
           <div className="grid2">
             <Field label="From (day-to-day account)">
@@ -240,6 +262,8 @@ export function Settings() {
               </select>
             </Field>
           </div>
+          </>
+          )}
           <button className="btn primary" type="submit">
             Save
           </button>

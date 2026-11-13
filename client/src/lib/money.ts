@@ -155,6 +155,8 @@ export interface Overview {
   owedTotal: number; // all open bills
   overdueCount: number;
   available: number; // spendable - owedSoon
+  /** Single-pot view: everything you had before this month started (total money minus this month's kept). */
+  savedBefore: number;
   month: MonthSummary;
   salary: { expected: number; currency: string; payday: number; accountId: number | null; received: boolean; receivedAmount: number } | null;
 }
@@ -210,6 +212,7 @@ export function overview(state: AppState, today = todayStr()): Overview {
     owedTotal,
     overdueCount,
     available: spendable - owedSoon,
+    savedBefore: spendable + savings - ms.kept,
     month: ms,
     salary,
   };

@@ -99,6 +99,8 @@ export interface Settings {
   sweep_to_account_id?: string;
   sweep_last?: string;
   sweep_enabled_since?: string;
+  /** "rolling": one pot, savings = what you had before this month. "accounts": separate savings accounts. */
+  savings_mode?: string;
 }
 
 export interface SweepPreview {

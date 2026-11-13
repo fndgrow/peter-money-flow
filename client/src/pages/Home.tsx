@@ -12,7 +12,8 @@ import { TxRow } from "./Transactions";
 export function Home() {
   const { state, fmt, fmt2, fmtIn, locale, run, offline } = useData();
   const today = todayStr();
-  const sweepOn = state.settings.sweep_enabled === "1";
+  const rolling = state.settings.savings_mode === "rolling";
+  const sweepOn = !rolling && state.settings.sweep_enabled === "1";
   const [sweep, setSweep] = useState<{ cur: SweepPreview; prev: SweepPreview } | null>(null);
   useEffect(() => {
     if (!sweepOn || offline) return;
@@ -67,22 +68,46 @@ export function Home() {
           <div className="big">{fmt(ov.totalMoney)}</div>
           {fmt2 && <div className="sub2">≈ {fmt2(ov.totalMoney)}</div>}
           <div className="row">
-            <div>
-              <div className="v">{fmt(ov.available)}</div>
-              {fmt2 && <div className="sub2">≈ {fmt2(ov.available)}</div>}
-              <div className="k">Free after payments</div>
-            </div>
+            {rolling ? (
+              <>
+                <div>
+                  <div className="v">{fmt(ov.savedBefore)}</div>
+                  {fmt2 && <div className="sub2">≈ {fmt2(ov.savedBefore)}</div>}
+                  <div className="k">Savings (before this month)</div>
+                </div>
+                <div>
+                  <div className="v">{ov.month.kept > 0 ? "+" : ""}{fmt(ov.month.kept)}</div>
+                  {fmt2 && <div className="sub2">≈ {fmt2(ov.month.kept)}</div>}
+                  <div className="k">This month so far</div>
+                </div>
+              </>
+            ) : (
+              <>
+                <div>
+                  <div className="v">{fmt(ov.available)}</div>
+                  {fmt2 && <div className="sub2">≈ {fmt2(ov.available)}</div>}
+                  <div className="k">Free after payments</div>
+                </div>
+                <div>
+                  <div className="v">{fmt(ov.savings)}</div>
+                  {fmt2 && <div className="sub2">≈ {fmt2(ov.savings)}</div>}
+                  <div className="k">In savings</div>
+                </div>
+              </>
+            )}
             <div>
               <div className="v">{fmt(ov.owedSoon)}</div>
               {fmt2 && <div className="sub2">≈ {fmt2(ov.owedSoon)}</div>}
               <div className="k">Owed this month</div>
             </div>
-            <div>
-              <div className="v">{fmt(ov.savings)}</div>
-              {fmt2 && <div className="sub2">≈ {fmt2(ov.savings)}</div>}
-              <div className="k">In savings</div>
-            </div>
           </div>
+          {rolling && (
+            <div className="tiny" style={{ opacity: 0.8, marginTop: 10 }}>
+              {ov.month.kept >= 0
+                ? `What is left at the end of the month stays in savings. Spend more than you earn and it comes out of savings.`
+                : `You are ${fmt(-ov.month.kept)} over this month's income, so savings are covering it.`}
+            </div>
+          )}
         </div>
 
         <div className="quick">

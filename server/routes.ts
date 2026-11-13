@@ -309,6 +309,7 @@ const SETTING_KEYS = [
   "sweep_enabled",
   "sweep_from_account_id",
   "sweep_to_account_id",
+  "savings_mode",
 ] as const;
 
 api.put(
@@ -331,6 +332,7 @@ api.put(
       }
       if (key === "salary_account_id" && value !== "" && value !== null) exists("accounts", id(value, "Account"), "Account");
       if ((key === "sweep_from_account_id" || key === "sweep_to_account_id") && value !== "" && value !== null) exists("accounts", id(value, "Account"), "Account");
+      if (key === "savings_mode") value = oneOf(value, "Savings mode", ["rolling", "accounts"] as const, "accounts");
       if (key === "sweep_enabled") {
         const on = value === "1" || value === true;
         value = on ? "1" : "";
