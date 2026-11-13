@@ -37,12 +37,12 @@ export function Home() {
       <div className="main">
 
         <div className="hero">
-          <div className="label">Total money</div>
-          <div className="big">{fmt(ov.totalMoney)}</div>
-          {fmt2 && <div className="sub2">≈ {fmt2(ov.totalMoney)}</div>}
-          <div className="row">
-            {rolling ? (
-              <>
+          {rolling ? (
+            <>
+              <div className="label">Total money</div>
+              <div className="big">{fmt(ov.totalMoney)}</div>
+              {fmt2 && <div className="sub2">≈ {fmt2(ov.totalMoney)}</div>}
+              <div className="row">
                 <div>
                   <div className="v">{fmt(ov.savedBefore)}</div>
                   {fmt2 && <div className="sub2">≈ {fmt2(ov.savedBefore)}</div>}
@@ -53,27 +53,38 @@ export function Home() {
                   {fmt2 && <div className="sub2">≈ {fmt2(ov.month.kept)}</div>}
                   <div className="k">This month so far</div>
                 </div>
-              </>
-            ) : (
-              <>
                 <div>
-                  <div className="v">{fmt(ov.available)}</div>
-                  {fmt2 && <div className="sub2">≈ {fmt2(ov.available)}</div>}
-                  <div className="k">Free after payments</div>
+                  <div className="v">{fmt(ov.owedTotal)}</div>
+                  {fmt2 && <div className="sub2">≈ {fmt2(ov.owedTotal)}</div>}
+                  <div className="k">To pay</div>
+                </div>
+              </div>
+            </>
+          ) : (
+            <>
+              {/* The money in cash and bank right now; savings are shown separately below. */}
+              <div className="label">This month</div>
+              <div className="big">{fmt(ov.spendable)}</div>
+              {fmt2 && <div className="sub2">≈ {fmt2(ov.spendable)}</div>}
+              <div className="row">
+                <div>
+                  <div className="v">{fmt(ov.totalMoney)}</div>
+                  {fmt2 && <div className="sub2">≈ {fmt2(ov.totalMoney)}</div>}
+                  <div className="k">Total (with savings)</div>
                 </div>
                 <div>
                   <div className="v">{fmt(ov.savings)}</div>
                   {fmt2 && <div className="sub2">≈ {fmt2(ov.savings)}</div>}
-                  <div className="k">In savings</div>
+                  <div className="k">Savings</div>
                 </div>
-              </>
-            )}
-            <div>
-              <div className="v">{fmt(ov.owedSoon)}</div>
-              {fmt2 && <div className="sub2">≈ {fmt2(ov.owedSoon)}</div>}
-              <div className="k">Owed this month</div>
-            </div>
-          </div>
+                <div>
+                  <div className="v">{fmt(ov.owedTotal)}</div>
+                  {fmt2 && <div className="sub2">≈ {fmt2(ov.owedTotal)}</div>}
+                  <div className="k">To pay</div>
+                </div>
+              </div>
+            </>
+          )}
           {rolling && (
             <div className="tiny" style={{ opacity: 0.8, marginTop: 10 }}>
               {ov.month.kept >= 0
