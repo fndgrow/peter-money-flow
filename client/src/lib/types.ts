@@ -91,6 +91,8 @@ export interface Settings {
   /** How many second-currency units one main unit buys (1 EUR = 20 MDL → "20"). */
   secondary_rate?: string;
   secondary_rate_date?: string;
+  /** "1" when the user types the rate by hand instead of the automatic daily update. */
+  secondary_rate_manual?: string;
 }
 
 export interface AppState {

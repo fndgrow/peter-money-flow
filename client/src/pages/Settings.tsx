@@ -21,6 +21,7 @@ export function Settings() {
   const [secCurrency, setSecCurrency] = useState(s.secondary_currency ?? "");
   const [secRate, setSecRate] = useState(s.secondary_rate ?? "");
   const [secDate, setSecDate] = useState(s.secondary_rate_date ?? "");
+  const [secManual, setSecManual] = useState(s.secondary_rate_manual === "1");
   const [fetchingRate, setFetchingRate] = useState(false);
   const [editCat, setEditCat] = useState<{ existing?: Category; kind: "income" | "expense"; parentId?: number } | null>(null);
   const [editProject, setEditProject] = useState<Project | null | "new">(null);
@@ -56,8 +57,8 @@ export function Settings() {
       () =>
         api.put("/api/settings", {
           secondary_currency: secCurrency,
-          secondary_rate: secCurrency ? secRate : "",
-          secondary_rate_date: secCurrency ? secDate : "",
+          secondary_rate_manual: secManual ? "1" : "",
+          ...(secManual ? { secondary_rate: secCurrency ? secRate : "", secondary_rate_date: secCurrency ? secDate : "" } : {}),
         }),
       secCurrency ? `Amounts will also show in ${secCurrency}` : "Second currency removed",
     );
@@ -207,17 +208,34 @@ export function Settings() {
                 ))}
               </select>
             </Field>
-            <Field label={secCurrency ? `1 ${mainCurrency} = … ${secCurrency}` : "Exchange rate"} hint={secDate ? `Rate from ${secDate}` : undefined}>
-              <input type="number" inputMode="decimal" step="0.0001" min="0" value={secRate} onChange={(e) => setSecRate(e.target.value)} disabled={!secCurrency} placeholder="19.40" />
+            <Field
+              label={secCurrency ? `1 ${mainCurrency} = … ${secCurrency}` : "Exchange rate"}
+              hint={secManual ? (secDate ? `Your rate from ${secDate}` : undefined) : s.secondary_rate ? `Updated automatically every day. Current: 1 ${mainCurrency} = ${s.secondary_rate} ${secCurrency} (${s.secondary_rate_date ?? "today"})` : "Fetched automatically once you save."}
+            >
+              <input
+                type="number"
+                inputMode="decimal"
+                step="0.0001"
+                min="0"
+                value={secManual ? secRate : (s.secondary_rate ?? "")}
+                onChange={(e) => setSecRate(e.target.value)}
+                disabled={!secCurrency || !secManual}
+                placeholder="20.10"
+              />
             </Field>
           </div>
+          <label className="check">
+            <input type="checkbox" checked={secManual} onChange={(e) => setSecManual(e.target.checked)} disabled={!secCurrency} /> I want to set the rate myself
+          </label>
           <div className="flex wrap">
             <button className="btn primary" type="submit">
               Save
             </button>
-            <button className="btn" type="button" onClick={fetchRate} disabled={!secCurrency || fetchingRate}>
-              {fetchingRate ? "Fetching…" : "Fetch today's rate"}
-            </button>
+            {secManual && (
+              <button className="btn" type="button" onClick={fetchRate} disabled={!secCurrency || fetchingRate}>
+                {fetchingRate ? "Fetching…" : "Fill in today's rate"}
+              </button>
+            )}
           </div>
         </form>
 

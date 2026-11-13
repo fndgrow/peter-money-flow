@@ -53,14 +53,14 @@ export function Home() {
         </div>
 
         <div className="hero">
-          <div className="label">Available after upcoming payments</div>
-          <div className="big">{fmt(ov.available)}</div>
-          {fmt2 && <div className="sub2">≈ {fmt2(ov.available)}</div>}
+          <div className="label">Total money</div>
+          <div className="big">{fmt(ov.totalMoney)}</div>
+          {fmt2 && <div className="sub2">≈ {fmt2(ov.totalMoney)}</div>}
           <div className="row">
             <div>
-              <div className="v">{fmt(ov.totalMoney)}</div>
-              {fmt2 && <div className="sub2">≈ {fmt2(ov.totalMoney)}</div>}
-              <div className="k">Total money</div>
+              <div className="v">{fmt(ov.available)}</div>
+              {fmt2 && <div className="sub2">≈ {fmt2(ov.available)}</div>}
+              <div className="k">Free after payments</div>
             </div>
             <div>
               <div className="v">{fmt(ov.owedSoon)}</div>

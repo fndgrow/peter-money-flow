@@ -16,7 +16,12 @@ export function TransactionForm({ initialType = "expense", existing, onClose }: 
   const [type, setType] = useState<TxType>(existing?.type ?? initialType);
   const [amount, setAmount] = useState(existing ? String(existing.amount) : "");
   const [date, setDate] = useState(existing?.date ?? todayStr());
-  const defaultAccount = state.accounts.find((a) => !a.archived && a.type === "bank") ?? state.accounts.find((a) => !a.archived);
+  const active = state.accounts.filter((a) => !a.archived);
+  // Income lands where the salary goes (or the first account in the second currency); spending starts from the main bank account.
+  const salaryAccount = active.find((a) => String(a.id) === state.settings.salary_account_id);
+  const incomeAccount = salaryAccount ?? active.find((a) => a.type === "bank" && secondary && a.currency === secondary.currency);
+  const defaultAccount =
+    (initialType === "income" ? incomeAccount : undefined) ?? active.find((a) => a.type === "bank") ?? active[0];
   const [accountId, setAccountId] = useState(String(existing?.account_id ?? defaultAccount?.id ?? ""));
   const [toAccountId, setToAccountId] = useState(String(existing?.to_account_id ?? ""));
   const [toAmount, setToAmount] = useState(existing?.to_amount != null ? String(existing.to_amount) : "");
@@ -105,6 +110,10 @@ export function TransactionForm({ initialType = "expense", existing, onClose }: 
               onChange={(v) => {
                 setType(v);
                 setCategoryId("");
+                if (!existing) {
+                  const next = v === "income" ? (incomeAccount ?? defaultAccount) : (active.find((a) => a.type === "bank") ?? active[0]);
+                  if (next) setAccountId(String(next.id));
+                }
               }}
               options={[
                 { value: "expense", label: "Expense", cls: "out" },

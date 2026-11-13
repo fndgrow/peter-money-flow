@@ -20,6 +20,8 @@ import {
   emailMatches,
 } from "./auth.js";
 
+import { fetchRate, refreshStoredRate } from "./rates.js";
+
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 export const api = Router();
@@ -302,11 +304,12 @@ const SETTING_KEYS = [
   "secondary_currency",
   "secondary_rate",
   "secondary_rate_date",
+  "secondary_rate_manual",
 ] as const;
 
 api.put(
   "/settings",
-  wrap((req, res) => {
+  wrap(async (req, res) => {
     const body = req.body ?? {};
     for (const key of SETTING_KEYS) {
       if (!(key in body)) continue;
@@ -325,6 +328,8 @@ api.put(
       if (key === "salary_account_id" && value !== "" && value !== null) exists("accounts", id(value, "Account"), "Account");
       setSetting(key, value === null || value === undefined ? null : String(value));
     }
+    // A new second currency (or switching back to automatic) gets today's rate straight away.
+    if ("secondary_currency" in body || "secondary_rate_manual" in body) await refreshStoredRate();
     res.json(allSettings());
   }),
 );
@@ -336,16 +341,13 @@ api.get(
     const base = String(req.query.base || "").toUpperCase();
     const quote = String(req.query.quote || "").toUpperCase();
     if (!/^[A-Z]{3}$/.test(base) || !/^[A-Z]{3}$/.test(quote)) throw new HttpError(400, "Give two currency codes");
-    let data: { result?: string; rates?: Record<string, number>; time_last_update_utc?: string };
+    let result: { rate: number; date: string };
     try {
-      const r = await fetch(`https://open.er-api.com/v6/latest/${base}`, { signal: AbortSignal.timeout(8000) });
-      data = (await r.json()) as typeof data;
-    } catch {
-      throw new HttpError(502, "Could not reach the exchange rate service");
+      result = await fetchRate(base, quote);
+    } catch (e) {
+      throw new HttpError(502, (e as Error).message.startsWith("No rate") ? (e as Error).message : "Could not reach the exchange rate service");
     }
-    const rate = data.rates?.[quote];
-    if (data.result !== "success" || !rate) throw new HttpError(502, `No rate for ${base} to ${quote}`);
-    res.json({ base, quote, rate, date: new Date(data.time_last_update_utc || Date.now()).toISOString().slice(0, 10) });
+    res.json({ base, quote, ...result });
   }),
 );
 
