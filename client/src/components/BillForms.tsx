@@ -127,7 +127,7 @@ export function PayBillForm({ bill, onClose }: { bill: Bill; onClose: () => void
   // Payments go out of day-to-day accounts (the second currency, e.g. MDL) when those exist.
   const active = state.accounts.filter((a) => !a.archived);
   const payAccounts = secondary && active.some((a) => a.currency === secondary.currency) ? active.filter((a) => a.currency === secondary.currency) : active;
-  const defaultAccount = payAccounts.find((a) => a.type === "bank") ?? payAccounts.find((a) => a.type !== "savings") ?? payAccounts[0];
+  const defaultAccount = payAccounts.find((a) => a.type === "cash") ?? payAccounts.find((a) => a.type !== "savings") ?? payAccounts[0];
   const [accountId, setAccountId] = useState(String(defaultAccount?.id ?? ""));
   const currency = state.accounts.find((a) => String(a.id) === accountId)?.currency || mainCurrency;
   const [amount, setAmount] = useState(String(Math.round(conv(remaining, billCur, defaultAccount?.currency || mainCurrency) * 100) / 100));

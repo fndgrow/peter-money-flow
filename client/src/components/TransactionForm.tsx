@@ -22,7 +22,8 @@ export function TransactionForm({ initialType = "expense", existing, onClose }: 
   const daily = secondary && active.some((a) => a.currency === secondary.currency) ? active.filter((a) => a.currency === secondary.currency) : active;
   // Income lands on the day-to-day bank account; spending starts there too.
   const incomeAccount = daily.find((a) => a.type === "bank") ?? daily.find((a) => a.type !== "savings");
-  const spendAccount = daily.find((a) => a.type === "bank") ?? daily.find((a) => a.type !== "savings") ?? daily[0];
+  // Spending and payments come out of cash by default; income lands in the bank.
+  const spendAccount = daily.find((a) => a.type === "cash") ?? daily.find((a) => a.type !== "savings") ?? daily[0];
   const defaultAccount = (initialType === "income" ? incomeAccount : initialType === "expense" ? spendAccount : undefined) ?? active.find((a) => a.type === "bank") ?? active[0];
   const [accountId, setAccountId] = useState(String(existing?.account_id ?? defaultAccount?.id ?? ""));
   const [toAccountId, setToAccountId] = useState(String(existing?.to_account_id ?? ""));
