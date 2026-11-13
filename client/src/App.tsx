@@ -62,7 +62,7 @@ export default function App() {
             <span>{n.label}</span>
           </NavLink>
         ))}
-        <NavLink to="/settings" className={({ isActive }) => (isActive ? "active" : "")} style={{ marginTop: "auto" }}>
+        <NavLink to="/settings" className={({ isActive }) => `nav-settings ${isActive ? "active" : ""}`}>
           {Icons.gear}
           <span>Settings</span>
         </NavLink>

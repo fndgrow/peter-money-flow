@@ -1,7 +1,8 @@
 import { useState, type FormEvent } from "react";
 import { api } from "../lib/api";
 import { useData } from "../lib/store";
-import { categoryGroups, todayStr } from "../lib/money";
+import { todayStr } from "../lib/money";
+import { CategoryPicker } from "./CategoryPicker";
 import type { Transaction, TxType } from "../lib/types";
 import { ConfirmDelete, Field, Segmented, Sheet } from "./ui";
 
@@ -228,30 +229,7 @@ export function TransactionForm({ initialType = "expense", existing, onClose }: 
           <>
             <Field label="Category">
               <div className="flex">
-                <select className="grow" value={categoryId} onChange={(e) => setCategoryId(e.target.value)} style={{ flex: 1 }}>
-                  <option value="">No category</option>
-                  {categoryGroups(state.categories, type, existing?.category_id).map(({ parent, children }) =>
-                    children.length === 0 ? (
-                      <option key={parent.id} value={parent.id}>
-                        {parent.icon ? `${parent.icon} ` : ""}
-                        {parent.name}
-                      </option>
-                    ) : (
-                      <optgroup key={parent.id} label={`${parent.icon ?? ""} ${parent.name}`}>
-                        <option value={parent.id}>
-                          {parent.icon ? `${parent.icon} ` : ""}
-                          {parent.name} (general)
-                        </option>
-                        {children.map((c) => (
-                          <option key={c.id} value={c.id}>
-                            {c.icon ? `${c.icon} ` : ""}
-                            {c.name}
-                          </option>
-                        ))}
-                      </optgroup>
-                    ),
-                  )}
-                </select>
+                <CategoryPicker kind={type} value={categoryId} onChange={setCategoryId} />
                 <button type="button" className="btn sm" onClick={addCategory} title="New category">
                   +
                 </button>

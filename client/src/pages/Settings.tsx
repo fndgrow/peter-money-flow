@@ -291,24 +291,40 @@ export function Settings() {
                   + Add
                 </button>
               </div>
-              <div className="cat-tree">
-                {groups.map(({ parent, children }) => (
-                  <div key={parent.id} className="cat-row">
-                    <button className="chip" style={{ opacity: parent.archived ? 0.5 : 1 }} onClick={() => setEditCat({ existing: parent, kind })}>
-                      {parent.icon} {parent.name}
-                    </button>
-                    {children.filter(visible).map((c) => (
-                      <button key={c.id} className="chip sub" style={{ opacity: c.archived ? 0.5 : 1 }} onClick={() => setEditCat({ existing: c, kind })}>
-                        {c.icon} {c.name}
-                      </button>
-                    ))}
-                    {kind === "expense" && (
-                      <button className="chip ghost" title={`Add a sub-category under ${parent.name}`} onClick={() => setEditCat({ kind, parentId: parent.id })}>
-                        +
-                      </button>
-                    )}
-                  </div>
-                ))}
+              <div className="list cat-list">
+                {groups.map(({ parent, children }) => {
+                  const kids = children.filter(visible);
+                  return (
+                    <div key={parent.id} className={`cat-group ${kids.length ? "open" : ""}`}>
+                      <div className={`row-item static ${parent.archived ? "archived" : ""}`}>
+                        <button className="row-main" onClick={() => setEditCat({ existing: parent, kind })}>
+                          <div className="ic">{parent.icon}</div>
+                          <div className="body">
+                            <div className="t">{parent.name}</div>
+                            {kids.length > 0 && <div className="s">{kids.length} sub-categories</div>}
+                          </div>
+                        </button>
+                        {kind === "expense" && (
+                          <button className="btn ghost sm" title={`Add a sub-category under ${parent.name}`} onClick={() => setEditCat({ kind, parentId: parent.id })}>
+                            + sub
+                          </button>
+                        )}
+                      </div>
+                      {kids.length > 0 && (
+                        <div className="cat-children">
+                          {kids.map((c) => (
+                            <button key={c.id} className={`row-item ${c.archived ? "archived" : ""}`} onClick={() => setEditCat({ existing: c, kind })}>
+                              <div className="ic">{c.icon}</div>
+                              <div className="body">
+                                <div className="t sub">{c.name}</div>
+                              </div>
+                            </button>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
               </div>
             </div>
           );

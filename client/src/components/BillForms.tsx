@@ -1,7 +1,8 @@
 import { useState, type FormEvent } from "react";
 import { api } from "../lib/api";
 import { useData } from "../lib/store";
-import { billPaidMap, billRemaining, categoryGroups, todayStr } from "../lib/money";
+import { billPaidMap, billRemaining, todayStr } from "../lib/money";
+import { CategoryPicker } from "./CategoryPicker";
 import type { Bill, Recurrence } from "../lib/types";
 import { ConfirmDelete, Field, Sheet } from "./ui";
 
@@ -101,29 +102,7 @@ export function BillForm({ existing, onClose, presetPersonId }: { existing?: Bil
             </select>
           </Field>
           <Field label="Spending category">
-            <select value={categoryId} onChange={(e) => setCategoryId(e.target.value)}>
-              {categoryGroups(state.categories, "expense", existing?.category_id).map(({ parent, children }) =>
-                children.length === 0 ? (
-                  <option key={parent.id} value={parent.id}>
-                    {parent.icon ? `${parent.icon} ` : ""}
-                    {parent.name}
-                  </option>
-                ) : (
-                  <optgroup key={parent.id} label={`${parent.icon ?? ""} ${parent.name}`}>
-                    <option value={parent.id}>
-                      {parent.icon ? `${parent.icon} ` : ""}
-                      {parent.name} (general)
-                    </option>
-                    {children.map((c) => (
-                      <option key={c.id} value={c.id}>
-                        {c.icon ? `${c.icon} ` : ""}
-                        {c.name}
-                      </option>
-                    ))}
-                  </optgroup>
-                ),
-              )}
-            </select>
+            <CategoryPicker kind="expense" value={categoryId} onChange={setCategoryId} allowNone={false} />
           </Field>
         </div>
         <Field label="Note">
