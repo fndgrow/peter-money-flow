@@ -177,7 +177,7 @@ export function migrateExpenseCategories() {
 }
 
 const DEFAULT_INCOME: [string, string, string | null][] = [
-  ["Company", "💼", "salary"],
+  ["Company", "💼", null],
   ["Bonus", "🎉", null],
   ["Freelance/project", "🧑‍💻", null],
   ["Gift", "🎁", null],
@@ -256,4 +256,10 @@ export function allSettings(): Record<string, string> {
 
 export function nowIso() {
   return new Date().toISOString();
+}
+
+/** The salary feature was removed: "Company" is an ordinary income category now and the old salary settings go away. */
+export function removeSalaryFeature() {
+  db.prepare("UPDATE categories SET system = NULL WHERE system = 'salary'").run();
+  db.prepare("DELETE FROM settings WHERE key IN ('salary_amount', 'salary_payday', 'salary_account_id')").run();
 }

@@ -15,9 +15,6 @@ export function Settings() {
   const [ownerName, setOwnerName] = useState(s.owner_name ?? "");
   const [currency, setCurrency] = useState(s.currency ?? "EUR");
   const [locale, setLocale] = useState(s.locale ?? "en-GB");
-  const [salaryAmount, setSalaryAmount] = useState(s.salary_amount ?? "");
-  const [salaryPayday, setSalaryPayday] = useState(s.salary_payday ?? "");
-  const [salaryAccount, setSalaryAccount] = useState(s.salary_account_id ?? "");
   const [secCurrency, setSecCurrency] = useState(s.secondary_currency ?? "");
   const [secRate, setSecRate] = useState(s.secondary_rate ?? "");
   const [secDate, setSecDate] = useState(s.secondary_rate_date ?? "");
@@ -46,13 +43,6 @@ export function Settings() {
   async function saveGeneral(e: FormEvent) {
     e.preventDefault();
     await run(() => api.put("/api/settings", { owner_name: ownerName, currency, locale }), "Saved");
-  }
-  async function saveSalary(e: FormEvent) {
-    e.preventDefault();
-    await run(
-      () => api.put("/api/settings", { salary_amount: salaryAmount, salary_payday: salaryPayday, salary_account_id: salaryAccount }),
-      "Salary settings saved",
-    );
   }
 
   async function saveSecondary(e: FormEvent) {
@@ -179,36 +169,6 @@ export function Settings() {
               </select>
             </Field>
           </div>
-          <button className="btn primary" type="submit">
-            Save
-          </button>
-        </form>
-
-        <form className="card" onSubmit={saveSalary}>
-          <div className="card-title">
-            <h2>My salary</h2>
-          </div>
-          <p className="small muted mb">The home screen shows the salary as expected until you confirm it arrived. Then the actual amount is added to the account.</p>
-          <div className="grid2">
-            <Field label={`Usual amount (${state.accounts.find((a) => String(a.id) === salaryAccount)?.currency ?? mainCurrency})`}>
-              <input type="number" inputMode="decimal" step="0.01" min="0" value={salaryAmount} onChange={(e) => setSalaryAmount(e.target.value)} placeholder="0" />
-            </Field>
-            <Field label="Payday (day of month)">
-              <input type="number" min="1" max="31" value={salaryPayday} onChange={(e) => setSalaryPayday(e.target.value)} placeholder="25" />
-            </Field>
-          </div>
-          <Field label="Paid into">
-            <select value={salaryAccount} onChange={(e) => setSalaryAccount(e.target.value)}>
-              <option value="">Choose at confirmation</option>
-              {state.accounts
-                .filter((a) => !a.archived)
-                .map((a) => (
-                  <option key={a.id} value={a.id}>
-                    {a.name}
-                  </option>
-                ))}
-            </select>
-          </Field>
           <button className="btn primary" type="submit">
             Save
           </button>

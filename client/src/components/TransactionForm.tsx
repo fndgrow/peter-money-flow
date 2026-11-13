@@ -19,9 +19,8 @@ export function TransactionForm({ initialType = "expense", existing, onClose }: 
   const active = state.accounts.filter((a) => !a.archived);
   // Day-to-day accounts: those in the second currency (e.g. MDL) when one is set up, otherwise all.
   const daily = secondary && active.some((a) => a.currency === secondary.currency) ? active.filter((a) => a.currency === secondary.currency) : active;
-  // Income lands where the salary goes; spending starts from the day-to-day bank account.
-  const salaryAccount = daily.find((a) => String(a.id) === state.settings.salary_account_id);
-  const incomeAccount = salaryAccount ?? daily.find((a) => a.type === "bank") ?? daily.find((a) => a.type !== "savings");
+  // Income lands on the day-to-day bank account; spending starts there too.
+  const incomeAccount = daily.find((a) => a.type === "bank") ?? daily.find((a) => a.type !== "savings");
   const spendAccount = daily.find((a) => a.type === "bank") ?? daily.find((a) => a.type !== "savings") ?? daily[0];
   const defaultAccount = (initialType === "income" ? incomeAccount : initialType === "expense" ? spendAccount : undefined) ?? active.find((a) => a.type === "bank") ?? active[0];
   const [accountId, setAccountId] = useState(String(existing?.account_id ?? defaultAccount?.id ?? ""));

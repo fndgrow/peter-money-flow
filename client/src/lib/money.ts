@@ -158,7 +158,6 @@ export interface Overview {
   /** Single-pot view: everything you had before this month started (total money minus this month's kept). */
   savedBefore: number;
   month: MonthSummary;
-  salary: { expected: number; currency: string; payday: number; accountId: number | null; received: boolean; receivedAmount: number } | null;
 }
 
 /** Everything on the home screen, in the main currency. */
@@ -185,25 +184,6 @@ export function overview(state: AppState, today = todayStr()): Overview {
   }
   const ms = monthSummary(state, month);
 
-  let salary: Overview["salary"] = null;
-  const expected = Number(state.settings.salary_amount || 0);
-  if (expected > 0) {
-    const salaryCat = state.categories.find((cat) => cat.system === "salary");
-    const accountId = state.settings.salary_account_id ? Number(state.settings.salary_account_id) : null;
-    const salaryAccount = accountId ? state.accounts.find((a) => a.id === accountId) : undefined;
-    const received = state.transactions.filter(
-      (t) => t.type === "income" && t.date.startsWith(month) && salaryCat && t.category_id === salaryCat.id,
-    );
-    salary = {
-      expected,
-      currency: salaryAccount?.currency || c.main,
-      payday: Number(state.settings.salary_payday || 25),
-      accountId,
-      received: received.length > 0,
-      receivedAmount: received.reduce((s, t) => s + c.conv(t.amount, state.accounts.find((a) => a.id === t.account_id)?.currency || c.main, salaryAccount?.currency || c.main), 0),
-    };
-  }
-
   return {
     totalMoney: spendable + savings,
     spendable,
@@ -214,7 +194,6 @@ export function overview(state: AppState, today = todayStr()): Overview {
     available: spendable - owedSoon,
     savedBefore: spendable + savings - ms.kept,
     month: ms,
-    salary,
   };
 }
 

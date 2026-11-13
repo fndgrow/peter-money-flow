@@ -1,7 +1,7 @@
 # My money
 
 A personal finance app for **one user**. One login, one dashboard, one transaction history.
-It tracks your salary, other income, personal spending, savings, and payments to people.
+It tracks your income, personal spending, savings, and payments to people.
 Open it through your private link, install it from the browser on your phone or computer,
 and the same account syncs your records across devices.
 
@@ -22,12 +22,12 @@ They appear in your payment list and do not need accounts. You pay them through 
 
 | Screen | What it shows |
 |---|---|
-| **Home** | Available money after setting aside upcoming payments, total money, savings, this month's income / spending / kept, expected salary, upcoming payments, recent transactions. Three quick actions: **Add income**, **Add expense**, **Record payment**. |
+| **Home** | Available money after setting aside upcoming payments, total money, savings, this month's income / spending / kept, upcoming payments, recent transactions. Three quick actions: **Add income**, **Add expense**, **Record payment**. |
 | **Transactions** | Add income, expenses and transfers. Browse by month, filter by type, account, category, person, project, or search. Tap any row to edit or delete. |
 | **People & Bills** | Who you need to pay, how much and when. Recurring payments, advances and partial payments. Per-person history. Bills not tied to a person (rent, subscriptions) work too. |
 | **Accounts & Savings** | Balances for cash, bank and savings accounts. Savings goals with progress and a "per month" estimate. Transfers between accounts. |
 | **Reports** | Income vs spending per month, where the money goes by category and by person, 12-month trend, project profit, export to Excel. |
-| **Settings** | Your name, currency, number format, salary (amount, payday, account), editable categories, projects, backup / restore, password, install instructions. |
+| **Settings** | Your name, currency, number format, editable categories, projects, backup / restore, password, install instructions. |
 
 ## How the app works
 
@@ -35,14 +35,12 @@ They appear in your payment list and do not need accounts. You pay them through 
 
 - **Accounts** hold money. Each has a type: cash, bank or savings. An account has an opening balance; everything after that comes from transactions. The balance is never stored, it is always computed, so nothing can drift out of sync.
 - **Transactions** move money. There are exactly three kinds:
-  - *Income* adds money to an account (salary, bonus, freelance, gifts...).
+  - *Income* adds money to an account (company pay, bonus, freelance, gifts...).
   - *Expense* removes money from an account. It has a spending category and optionally a person and a project.
   - *Transfer* moves money between two of your accounts. It changes neither your total money nor your monthly spending.
 - **Bills** are promises, not money. A bill is something you will pay: to a person, or a recurring cost like rent. It has an amount, a due date and an optional repeat rule. A bill affects nothing until you record a payment against it.
 
 ### Money flows
-
-**Salary.** Set the usual amount and payday in Settings. Home shows it as *expected* until you tap **It arrived**, which records an income transaction with the actual amount into the account that received it. Until then it is not counted anywhere.
 
 **Payments to people.** Schedule a payment with a person, amount, due date and whether it repeats. Each payment you record creates an expense transaction linked to the bill. Owe 4,000 and pay 1,500 in advance? The bill shows **2,500 remaining**, and your account balance dropped by 1,500 only. When the remaining amount reaches zero the bill is marked paid. If it repeats, the next occurrence is created automatically (same amount, next week / month / year). You can also **skip** one occurrence or **cancel** a bill.
 
@@ -77,7 +75,7 @@ There is one password, chosen on the first visit. Sessions last 90 days and are 
 │   ├── index.ts            starts the server, serves the built client, security headers
 │   ├── db.ts               opens SQLite (node:sqlite), creates tables, seeds default categories/accounts
 │   ├── auth.ts             password hashing (bcrypt), session cookies, login rate limit
-│   └── routes.ts           all /api endpoints: auth, state, CRUD, bill payments, salary, backup, Excel export
+│   └── routes.ts           all /api endpoints: auth, state, CRUD, bill payments, backup, Excel export
 ├── client/                 React + Vite PWA (TypeScript)
 │   ├── index.html
 │   ├── vite.config.ts      Vite + PWA manifest and service worker config
@@ -94,7 +92,7 @@ There is one password, chosen on the first visit. Sessions last 90 days and are 
 │       ├── components/
 │       │   ├── ui.tsx              Sheet (bottom modal), Field, Progress, Toasts, icons
 │       │   ├── TransactionForm.tsx add / edit income, expense, transfer
-│       │   ├── BillForms.tsx       schedule a bill, record a payment, confirm salary
+│       │   ├── BillForms.tsx       schedule a bill, record a payment
 │       │   └── EntityForms.tsx     account, category, person, project, goal forms
 │       └── pages/
 │           ├── Login.tsx, Home.tsx, Transactions.tsx, People.tsx,
@@ -111,9 +109,9 @@ There is one password, chosen on the first visit. Sessions last 90 days and are 
 |---|---|
 | `user` | the single password hash |
 | `sessions` | login tokens with expiry |
-| `settings` | key/value: currency, locale, salary amount / payday / account, owner name |
+| `settings` | key/value: currency, locale, owner name |
 | `accounts` | name, type (cash / bank / savings), opening balance, archived flag |
-| `categories` | name, kind (income / expense), icon; two are marked `system` (salary, payments to people) and cannot be deleted |
+| `categories` | name, kind (income / expense), icon; one is marked `system` (payments to people) and cannot be deleted |
 | `people` | people you pay |
 | `projects` | side work, for profit tracking |
 | `bills` | scheduled payments: title, person, category, amount, due date, recurrence, status (open / paid / cancelled) |
@@ -132,7 +130,6 @@ All endpoints are under `/api` and, except setup/login, require the session cook
 | `POST/PUT/DELETE /accounts`, `/categories`, `/people`, `/projects`, `/goals`, `/bills`, `/transactions` | CRUD |
 | `POST /bills/:id/payments` | record a (partial) payment; creates the expense and updates the bill |
 | `POST /bills/:id/skip`, `POST /bills/:id/status` | skip one occurrence; cancel or reopen |
-| `POST /salary/confirm` | record this month's salary |
 | `GET /export.xlsx` | Excel workbook: transactions, monthly summary, by category, payments to people, accounts |
 | `GET /backup`, `POST /restore` | full JSON backup and restore |
 

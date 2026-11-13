@@ -298,9 +298,6 @@ api.get("/state", (_req, res) => {
 const SETTING_KEYS = [
   "currency",
   "locale",
-  "salary_amount",
-  "salary_payday",
-  "salary_account_id",
   "owner_name",
   "secondary_currency",
   "secondary_rate",
@@ -319,18 +316,12 @@ api.put(
     for (const key of SETTING_KEYS) {
       if (!(key in body)) continue;
       let value = body[key];
-      if (key === "salary_amount" && value !== "" && value !== null) value = num(value, "Salary amount", { min: 0 });
       if (key === "secondary_rate" && value !== "" && value !== null) {
         const r = Number(String(value).replace(",", "."));
         if (!Number.isFinite(r) || r <= 0) throw new HttpError(400, "Rate must be a positive number");
         value = r;
       }
       if (key === "secondary_currency" && value) value = String(value).toUpperCase().slice(0, 3);
-      if (key === "salary_payday" && value !== "" && value !== null) {
-        const d = Number(value);
-        if (!Number.isInteger(d) || d < 1 || d > 31) throw new HttpError(400, "Payday must be 1-31");
-      }
-      if (key === "salary_account_id" && value !== "" && value !== null) exists("accounts", id(value, "Account"), "Account");
       if ((key === "sweep_from_account_id" || key === "sweep_to_account_id") && value !== "" && value !== null) exists("accounts", id(value, "Account"), "Account");
       if (key === "savings_mode") value = oneOf(value, "Savings mode", ["rolling", "accounts"] as const, "accounts");
       if (key === "sweep_enabled") {
@@ -843,25 +834,6 @@ api.post(
     const r = db.prepare("DELETE FROM transactions WHERE note = ? AND type = 'transfer'").run(sweepNote(month));
     if (allSettings().sweep_last === month) setSetting("sweep_last", null);
     res.json({ removed: Number(r.changes) });
-  }),
-);
-
-/** Confirm this month's salary arrived: creates the income transaction. */
-api.post(
-  "/salary/confirm",
-  wrap((req, res) => {
-    const amount = num(req.body?.amount, "Amount", { min: 0.01 }) as number;
-    const date = dateStr(req.body?.date, "Date") as string;
-    const accountId = id(req.body?.account_id, "Account") as number;
-    exists("accounts", accountId, "Account");
-    const categoryId = systemCategory("salary");
-    const r = db
-      .prepare(
-        `INSERT INTO transactions (type, amount, date, account_id, category_id, note, created_at)
-         VALUES ('income', ?, ?, ?, ?, 'Salary', ?)`,
-      )
-      .run(amount, date, accountId, categoryId, nowIso());
-    res.json({ id: Number(r.lastInsertRowid) });
   }),
 );
 

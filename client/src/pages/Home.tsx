@@ -5,7 +5,7 @@ import { useData } from "../lib/store";
 import { addDays, billPaidMap, billRemaining, daysBetween, formatDate, monthLabel, monthKey, overview, shiftMonth, todayStr } from "../lib/money";
 import type { Bill, SweepPreview, Transaction, TxType } from "../lib/types";
 import { TransactionForm } from "../components/TransactionForm";
-import { BillForm, PayBillForm, SalaryConfirmForm } from "../components/BillForms";
+import { BillForm, PayBillForm } from "../components/BillForms";
 import { Empty, Money, Sheet } from "../components/ui";
 import { TxRow } from "./Transactions";
 
@@ -29,7 +29,6 @@ export function Home() {
   const [paying, setPaying] = useState<Bill | null>(null);
   const [pickBill, setPickBill] = useState(false);
   const [newBill, setNewBill] = useState(false);
-  const [salary, setSalary] = useState(false);
 
   const horizon = addDays(today, 30);
   const upcoming = state.bills
@@ -121,33 +120,6 @@ export function Home() {
             <span className="big-ic">✓</span>Record payment
           </button>
         </div>
-
-        {ov.salary && (
-          <div className="card">
-            {ov.salary.received ? (
-              <div className="between">
-                <div>
-                  <div className="bold">Salary received</div>
-                  <div className="small muted">{fmtIn(ov.salary.currency)(ov.salary.receivedAmount)} this month</div>
-                </div>
-                <span className="pill good">Done</span>
-              </div>
-            ) : (
-              <div className="between">
-                <div>
-                  <div className="bold">Expected salary {fmtIn(ov.salary.currency)(ov.salary.expected)}</div>
-                  <div className="small muted">
-                    Usually around the {ov.salary.payday}
-                    {ordinal(ov.salary.payday)}. Not counted until you confirm it.
-                  </div>
-                </div>
-                <button className="btn primary sm" onClick={() => setSalary(true)}>
-                  It arrived
-                </button>
-              </div>
-            )}
-          </div>
-        )}
 
         {sweepOn && sweep && (
           <div className="card">
@@ -284,7 +256,6 @@ export function Home() {
       {editing && <TransactionForm existing={editing} onClose={() => setEditing(null)} />}
       {paying && <PayBillForm bill={paying} onClose={() => setPaying(null)} />}
       {newBill && <BillForm onClose={() => setNewBill(false)} />}
-      {salary && <SalaryConfirmForm onClose={() => setSalary(false)} />}
       {pickBill && (
         <Sheet title="Which payment?" onClose={() => setPickBill(false)}>
           <div className="list">
@@ -323,10 +294,4 @@ export function Home() {
       )}
     </>
   );
-}
-
-function ordinal(n: number) {
-  const s = ["th", "st", "nd", "rd"];
-  const v = n % 100;
-  return s[(v - 20) % 10] || s[v] || s[0];
 }

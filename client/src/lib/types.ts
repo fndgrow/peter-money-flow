@@ -83,9 +83,6 @@ export interface Transaction {
 export interface Settings {
   currency?: string;
   locale?: string;
-  salary_amount?: string;
-  salary_payday?: string;
-  salary_account_id?: string;
   owner_name?: string;
   secondary_currency?: string;
   /** How many second-currency units one main unit buys (1 EUR = 20 MDL → "20"). */
