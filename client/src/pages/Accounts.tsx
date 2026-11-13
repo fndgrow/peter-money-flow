@@ -69,10 +69,29 @@ export function Accounts() {
                 <h2>{g.title}</h2>
                 <div className="tiny muted">{g.hint}</div>
               </div>
-              <div style={{ textAlign: "right" }}>
-                <div className="bold">{fmt(g.list.reduce((s, a) => s + inMain(a), 0))}</div>
-                {fmt2 && <div className="sub2">≈ {fmt2(g.list.reduce((s, a) => s + inMain(a), 0))}</div>}
-              </div>
+              {g.list.length > 1 &&
+                (() => {
+                  // One account: its own row says it all. Several: show the group total in their shared currency.
+                  const curs = new Set(g.list.map((a) => a.currency || currency));
+                  if (curs.size === 1) {
+                    const cur = [...curs][0];
+                    const sum = g.list.reduce((s, a) => s + (balances.get(a.id) ?? 0), 0);
+                    const small = cur !== currency ? fmt(conv(sum, cur, currency)) : fmt2 ? fmt2(sum) : null;
+                    return (
+                      <div style={{ textAlign: "right" }}>
+                        <div className="bold">{fmtIn(cur)(sum)}</div>
+                        {small && <div className="sub2">≈ {small}</div>}
+                      </div>
+                    );
+                  }
+                  const sumMain = g.list.reduce((s, a) => s + inMain(a), 0);
+                  return (
+                    <div style={{ textAlign: "right" }}>
+                      <div className="bold">{fmt(sumMain)}</div>
+                      {fmt2 && <div className="sub2">≈ {fmt2(sumMain)}</div>}
+                    </div>
+                  );
+                })()}
             </div>
             <div className="list">
               {g.list.map((a) => (
@@ -174,7 +193,6 @@ function AccountRow({ a, balance, onEdit, onOpen }: { a: Account; balance: numbe
           {a.name} <span className="pill">{a.currency}</span>
         </div>
         <div className="s">
-          {a.type === "savings" ? "Savings" : a.type === "cash" ? "Cash" : "Bank"} ·{" "}
           <a
             href="#"
             onClick={(e) => {
