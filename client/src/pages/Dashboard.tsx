@@ -146,20 +146,6 @@ export function Dashboard() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [state, period, locale]);
 
-  // Daily spending in the period (bars), capped to the last 62 days for readability.
-  const daily = useMemo(() => {
-    const from = daysBetween(range.from, range.to) > 62 ? addDays(range.to, -61) : range.from;
-    const m = new Map<string, number>();
-    for (let d = from; d <= range.to; d = addDays(d, 1)) m.set(d, 0);
-    for (const t of state.transactions) {
-      if (t.type !== "expense" || t.date < from || t.date > range.to) continue;
-      m.set(t.date, (m.get(t.date) ?? 0) + inMain(t));
-    }
-    return [...m.entries()].map(([d, v]) => ({ label: formatDate(d, locale, { day: "numeric", month: "short" }), value: v, date: d }));
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [state, range.from, range.to, locale]);
-  const biggestDay = daily.reduce((b, d) => (d.value > b.value ? d : b), { label: "", value: 0, date: "" });
-
   // Total money at the end of each of the last 12 months.
   const wealth = useMemo(() => {
     const cur = monthKey(today);
@@ -665,41 +651,6 @@ export function Dashboard() {
           </div>
           <Bars groups={months.map((m) => ({ label: m.label, values: [m.expense] }))} series={[{ name: "Spending", color: "var(--s2)" }]} format={fmt} />
         </div>
-      )}
-
-      {view === "overview" && (
-      <div className="card">
-        <div className="card-title">
-          <h2>Income vs spending by month</h2>
-        </div>
-        <Bars
-          groups={months.map((m) => ({ label: m.label, values: [m.income, m.expense], meta: <span className="muted">kept {fmt(m.income - m.expense)}</span> }))}
-          series={[
-            { name: "Income", color: "var(--s3)" },
-            { name: "Spending", color: "var(--s2)" },
-          ]}
-          format={fmt}
-        />
-        <Legend items={[{ label: "Income", color: "var(--s3)" }, { label: "Spending", color: "var(--s2)" }]} />
-      </div>
-      )}
-
-      {view !== "income" && (
-      <div className="card">
-        <div className="card-title">
-          <h2>Spending per day</h2>
-          {biggestDay.value > 0 && (
-            <span className="muted tiny">
-              peak {biggestDay.label}: {fmt(biggestDay.value)}
-            </span>
-          )}
-        </div>
-        {daily.every((d) => d.value === 0) ? (
-          <Empty>No spending in this period.</Empty>
-        ) : (
-          <Bars groups={daily.map((d) => ({ label: d.label.split(" ")[0], values: [d.value], meta: <span className="muted">{d.label}</span> }))} series={[{ name: "Spent", color: "var(--s2)" }]} format={fmt} height={130} />
-        )}
-      </div>
       )}
 
       {view === "overview" && (
