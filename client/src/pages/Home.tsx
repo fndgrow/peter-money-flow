@@ -1,27 +1,17 @@
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import { Link } from "react-router-dom";
-import { api } from "../lib/api";
 import { useData } from "../lib/store";
-import { addDays, billPaidMap, billRemaining, daysBetween, formatDate, monthLabel, monthKey, overview, shiftMonth, todayStr } from "../lib/money";
-import type { Bill, SweepPreview, Transaction, TxType } from "../lib/types";
+import { addDays, billPaidMap, billRemaining, daysBetween, formatDate, monthKey, overview, todayStr } from "../lib/money";
+import type { Bill, Transaction, TxType } from "../lib/types";
 import { TransactionForm } from "../components/TransactionForm";
 import { BillForm, PayBillForm } from "../components/BillForms";
 import { Empty, Money, Sheet } from "../components/ui";
 import { TxRow } from "./Transactions";
 
 export function Home() {
-  const { state, fmt, fmt2, fmtIn, locale, run, offline } = useData();
+  const { state, fmt, fmt2, fmtIn, locale } = useData();
   const today = todayStr();
   const rolling = state.settings.savings_mode === "rolling";
-  const sweepOn = !rolling && state.settings.sweep_enabled === "1";
-  const [sweep, setSweep] = useState<{ cur: SweepPreview; prev: SweepPreview } | null>(null);
-  useEffect(() => {
-    if (!sweepOn || offline) return;
-    const m = monthKey(today);
-    Promise.all([api.get<SweepPreview>(`/api/sweep/preview?month=${m}`), api.get<SweepPreview>(`/api/sweep/preview?month=${shiftMonth(m, -1)}`)])
-      .then(([cur, prev]) => setSweep({ cur, prev }))
-      .catch(() => setSweep(null));
-  }, [sweepOn, offline, state, today]);
   const ov = useMemo(() => overview(state, today), [state, today]);
   const paid = useMemo(() => billPaidMap(state), [state]);
   const [adding, setAdding] = useState<TxType | null>(null);
@@ -104,47 +94,6 @@ export function Home() {
             <span className="big-ic">✓</span>Record payment
           </button>
         </div>
-
-        {sweepOn && sweep && (
-          <div className="card">
-            {(() => {
-              const f = fmtIn(sweep.cur.currency);
-              const since = state.settings.sweep_enabled_since || "";
-              const prevRelevant = !sweep.prev.done && (!since || sweep.prev.month >= since) && Math.abs(sweep.prev.amount) >= 0.01;
-              const p = prevRelevant ? sweep.prev : sweep.cur;
-              const isCur = p === sweep.cur;
-              const title = p.done
-                ? `${monthLabel(p.month, locale)} closed`
-                : isCur
-                  ? `${monthLabel(p.month, locale)} so far`
-                  : `Close ${monthLabel(p.month, locale)}`;
-              const line =
-                p.amount > 0
-                  ? `${f(p.amount)} ${p.done ? "moved" : "will move"} into savings`
-                  : p.amount < 0
-                    ? `${f(-p.amount)} ${p.done ? "came" : "will come"} back from savings to cover the shortfall`
-                    : "Nothing to move: income and spending are equal";
-              return (
-                <>
-                  <div className="between">
-                    <div>
-                      <div className="bold">{title}</div>
-                      <div className="small muted">
-                        Income {f(p.income)} − spending {f(p.expense)} = <span className={p.kept < 0 ? "expense bold" : "income bold"}>{f(p.kept)}</span>
-                      </div>
-                      <div className="small mt" style={{ marginTop: 4 }}>
-                        {line}
-                        {isCur && !p.done ? " on the 1st" : ""}
-                      </div>
-                      {p.capped && <div className="tiny warn">{p.note}</div>}
-                    </div>
-                    {p.done && <span className="pill good">Done</span>}
-                  </div>
-                </>
-              );
-            })()}
-          </div>
-        )}
 
         <div className="stats">
           <div className="stat">
