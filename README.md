@@ -170,7 +170,19 @@ Environment variables (see `.env.example`):
 
 ## Deploy (your private link)
 
-Any host that runs Node 22+ and gives you a persistent disk works. Two easy options:
+Any host that runs Node 22+ and gives you a persistent disk works.
+
+**Fresh Ubuntu/Debian VPS, one command** (installs Node, Caddy with automatic HTTPS, a systemd service):
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/fndgrow/peter-money-flow/main/deploy/server-setup.sh -o server-setup.sh
+bash server-setup.sh                 # uses <ip>.sslip.io for HTTPS
+bash server-setup.sh money.example.com   # or your own domain pointed at the server
+```
+
+The script clones the repo into `/opt/my-money`, keeps the database in `/var/lib/my-money`, and prints the link at the end. If the repo is private, add the server's SSH key as a read-only deploy key first, or copy the code to `/opt/my-money` yourself.
+
+Other options:
 
 **Docker** (Fly.io, Railway, Render, a VPS with Caddy or Nginx in front):
 
