@@ -141,16 +141,14 @@ export function BillForm({ existing, onClose, presetPersonId }: { existing?: Bil
 }
 
 export function PayBillForm({ bill, onClose }: { bill: Bill; onClose: () => void }) {
-  const { state, run, fmtIn, conv, currency: mainCurrency } = useData();
+  const { state, run, fmtIn, conv, currency: mainCurrency, secondary } = useData();
   const remaining = billRemaining(bill, billPaidMap(state));
   const billCur = bill.currency || mainCurrency;
   const fmtBill = fmtIn(billCur);
-  // Prefer an account in the bill's currency.
-  const defaultAccount =
-    state.accounts.find((a) => !a.archived && a.currency === billCur && a.type === "bank") ??
-    state.accounts.find((a) => !a.archived && a.currency === billCur) ??
-    state.accounts.find((a) => !a.archived && a.type === "bank") ??
-    state.accounts.find((a) => !a.archived);
+  // Payments go out of day-to-day accounts (the second currency, e.g. MDL) when those exist.
+  const active = state.accounts.filter((a) => !a.archived);
+  const payAccounts = secondary && active.some((a) => a.currency === secondary.currency) ? active.filter((a) => a.currency === secondary.currency) : active;
+  const defaultAccount = payAccounts.find((a) => a.type === "bank") ?? payAccounts.find((a) => a.type !== "savings") ?? payAccounts[0];
   const [accountId, setAccountId] = useState(String(defaultAccount?.id ?? ""));
   const currency = state.accounts.find((a) => String(a.id) === accountId)?.currency || mainCurrency;
   const [amount, setAmount] = useState(String(Math.round(conv(remaining, billCur, defaultAccount?.currency || mainCurrency) * 100) / 100));
@@ -200,13 +198,11 @@ export function PayBillForm({ bill, onClose }: { bill: Bill; onClose: () => void
         <div className="grid2">
           <Field label="From account">
             <select value={accountId} onChange={(e) => setAccountId(e.target.value)} required>
-              {state.accounts
-                .filter((a) => !a.archived)
-                .map((a) => (
-                  <option key={a.id} value={a.id}>
-                    {a.name} ({a.currency})
-                  </option>
-                ))}
+              {payAccounts.map((a) => (
+                <option key={a.id} value={a.id}>
+                  {a.name} ({a.currency})
+                </option>
+              ))}
             </select>
           </Field>
           <Field label="Date">

@@ -17,11 +17,13 @@ export function TransactionForm({ initialType = "expense", existing, onClose }: 
   const [amount, setAmount] = useState(existing ? String(existing.amount) : "");
   const [date, setDate] = useState(existing?.date ?? todayStr());
   const active = state.accounts.filter((a) => !a.archived);
-  // Income lands where the salary goes (or the first account in the second currency); spending starts from the main bank account.
-  const salaryAccount = active.find((a) => String(a.id) === state.settings.salary_account_id);
-  const incomeAccount = salaryAccount ?? active.find((a) => a.type === "bank" && secondary && a.currency === secondary.currency);
-  const defaultAccount =
-    (initialType === "income" ? incomeAccount : undefined) ?? active.find((a) => a.type === "bank") ?? active.find((a) => a.type !== "savings") ?? active[0];
+  // Day-to-day accounts: those in the second currency (e.g. MDL) when one is set up, otherwise all.
+  const daily = secondary && active.some((a) => a.currency === secondary.currency) ? active.filter((a) => a.currency === secondary.currency) : active;
+  // Income lands where the salary goes; spending starts from the day-to-day bank account.
+  const salaryAccount = daily.find((a) => String(a.id) === state.settings.salary_account_id);
+  const incomeAccount = salaryAccount ?? daily.find((a) => a.type === "bank") ?? daily.find((a) => a.type !== "savings");
+  const spendAccount = daily.find((a) => a.type === "bank") ?? daily.find((a) => a.type !== "savings") ?? daily[0];
+  const defaultAccount = (initialType === "income" ? incomeAccount : initialType === "expense" ? spendAccount : undefined) ?? active.find((a) => a.type === "bank") ?? active[0];
   const [accountId, setAccountId] = useState(String(existing?.account_id ?? defaultAccount?.id ?? ""));
   const [toAccountId, setToAccountId] = useState(String(existing?.to_account_id ?? ""));
   const [toAmount, setToAmount] = useState(existing?.to_amount != null ? String(existing.to_amount) : "");
@@ -32,10 +34,13 @@ export function TransactionForm({ initialType = "expense", existing, onClose }: 
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
 
-  // Income only goes into cash or bank accounts; savings are filled through transfers.
+  // Income and expenses happen in the day-to-day currency (the second currency, e.g. MDL) when one is set up;
+  // income only goes into cash or bank accounts; savings are filled through transfers. Transfers can use any account.
+  const dayToDay = secondary && state.accounts.some((a) => !a.archived && a.currency === secondary.currency) ? secondary.currency : null;
   const accounts = state.accounts.filter(
     (a) =>
       (!a.archived || a.id === existing?.account_id || a.id === existing?.to_account_id) &&
+      (type === "transfer" || !dayToDay || a.currency === dayToDay || a.id === existing?.account_id) &&
       (type !== "income" || a.type !== "savings" || a.id === existing?.account_id),
   );
   const people = state.people.filter((p) => !p.archived || p.id === existing?.person_id);
@@ -116,7 +121,7 @@ export function TransactionForm({ initialType = "expense", existing, onClose }: 
                 setType(v);
                 setCategoryId("");
                 if (!existing) {
-                  const next = v === "income" ? (incomeAccount ?? active.find((a) => a.type !== "savings")) : (active.find((a) => a.type === "bank") ?? active[0]);
+                  const next = v === "income" ? incomeAccount : v === "expense" ? spendAccount : (active.find((a) => a.type === "bank") ?? active[0]);
                   if (next) setAccountId(String(next.id));
                 }
               }}
