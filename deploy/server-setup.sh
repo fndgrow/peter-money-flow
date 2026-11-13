@@ -39,6 +39,7 @@ id -u mymoney >/dev/null 2>&1 || useradd --system --home "$APP_DIR" --shell /usr
 mkdir -p "$APP_DIR" "$DATA_DIR"
 
 echo "==> Code"
+git config --global --add safe.directory "$APP_DIR" >/dev/null 2>&1 || true
 if [ -d "$APP_DIR/.git" ]; then
   git -C "$APP_DIR" pull --ff-only
 elif [ -f "$APP_DIR/package.json" ]; then
