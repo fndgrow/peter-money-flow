@@ -1,5 +1,6 @@
 // Generates the PWA icons (PNG) without any image library:
-// a teal rounded square with a white rising bar chart.
+// an indigo rounded square (the app accent) with a white wallet, a card peeking out
+// and a lavender clasp. Edges are anti-aliased with 4x4 supersampling.
 import fs from "node:fs";
 import path from "node:path";
 import zlib from "node:zlib";
@@ -9,6 +10,7 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const outDir = path.resolve(__dirname, "../client/public/icons");
 fs.mkdirSync(outDir, { recursive: true });
 
+// ---------- PNG writer ----------
 const crcTable = new Int32Array(256);
 for (let n = 0; n < 256; n++) {
   let c = n;
@@ -28,60 +30,7 @@ function chunk(type, data) {
   crc.writeUInt32BE(crc32(td));
   return Buffer.concat([len, td, crc]);
 }
-
-function render(size, { padding = 0, radius = 0.22 }) {
-  const px = Buffer.alloc(size * size * 4);
-  const bg = [15, 118, 110]; // teal
-  const bgDark = [13, 95, 89];
-  const white = [255, 255, 255];
-  const r = size * radius;
-  const pad = size * padding;
-  const inner = size - pad * 2;
-  // bars: x positions and heights relative to inner box
-  const bars = [
-    [0.2, 0.3],
-    [0.42, 0.5],
-    [0.64, 0.72],
-  ];
-  const barW = inner * 0.16;
-  const baseY = pad + inner * 0.8;
-
-  for (let y = 0; y < size; y++) {
-    for (let x = 0; x < size; x++) {
-      const i = (y * size + x) * 4;
-      let color = null;
-      // rounded square background
-      const lx = x - pad, ly = y - pad;
-      let inside = lx >= 0 && ly >= 0 && lx < inner && ly < inner;
-      if (inside) {
-        const cx = Math.min(Math.max(lx, r), inner - r);
-        const cy = Math.min(Math.max(ly, r), inner - r);
-        inside = (lx - cx) ** 2 + (ly - cy) ** 2 <= r * r;
-      }
-      if (inside) {
-        const t = (lx + ly) / (2 * inner);
-        color = bg.map((c, k) => Math.round(c * (1 - t) + bgDark[k] * t));
-        for (const [bx, bh] of bars) {
-          const x0 = pad + inner * bx, x1 = x0 + barW;
-          const y0 = baseY - inner * bh * 0.6, y1 = baseY;
-          if (x >= x0 && x < x1 && y >= y0 && y < y1) color = white;
-        }
-        // small upward arrow line across bar tops
-        const ax0 = pad + inner * 0.2, ay0 = baseY - inner * 0.3 * 0.6 - inner * 0.09;
-        const ax1 = pad + inner * 0.8, ay1 = baseY - inner * 0.72 * 0.6 - inner * 0.09;
-        const tt = (x - ax0) / (ax1 - ax0);
-        if (tt >= 0 && tt <= 1) {
-          const ly2 = ay0 + (ay1 - ay0) * tt;
-          if (Math.abs(y - ly2) < inner * 0.035) color = white;
-        }
-      }
-      if (color) {
-        px[i] = color[0]; px[i + 1] = color[1]; px[i + 2] = color[2]; px[i + 3] = 255;
-      } else {
-        px[i] = 0; px[i + 1] = 0; px[i + 2] = 0; px[i + 3] = 0;
-      }
-    }
-  }
+function png(size, px) {
   const raw = Buffer.alloc((size * 4 + 1) * size);
   for (let y = 0; y < size; y++) {
     raw[y * (size * 4 + 1)] = 0;
@@ -94,12 +43,69 @@ function render(size, { padding = 0, radius = 0.22 }) {
   return Buffer.concat([
     Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]),
     chunk("IHDR", ihdr),
-    chunk("IDAT", zlib.deflateSync(raw)),
+    chunk("IDAT", zlib.deflateSync(raw, { level: 9 })),
     chunk("IEND", Buffer.alloc(0)),
   ]);
 }
 
-fs.writeFileSync(path.join(outDir, "icon-192.png"), render(192, { padding: 0 }));
-fs.writeFileSync(path.join(outDir, "icon-512.png"), render(512, { padding: 0 }));
-fs.writeFileSync(path.join(outDir, "apple-touch-icon.png"), render(180, { padding: 0, radius: 0 }));
+// ---------- tiny vector helpers (unit coordinates, 0..1) ----------
+const hex = (h) => [parseInt(h.slice(1, 3), 16), parseInt(h.slice(3, 5), 16), parseInt(h.slice(5, 7), 16)];
+const mix = (a, b, t) => a.map((c, i) => c + (b[i] - c) * t);
+/** Signed distance to a rounded rectangle centred at (cx, cy) with half sizes (hw, hh) and corner radius r. */
+function sdRoundRect(x, y, cx, cy, hw, hh, r) {
+  const dx = Math.abs(x - cx) - (hw - r), dy = Math.abs(y - cy) - (hh - r);
+  return Math.hypot(Math.max(dx, 0), Math.max(dy, 0)) + Math.min(Math.max(dx, dy), 0) - r;
+}
+const sdCircle = (x, y, cx, cy, r) => Math.hypot(x - cx, y - cy) - r;
+
+const INDIGO_1 = hex("#5b54f0"); // accent, lighter (top-left)
+const INDIGO_2 = hex("#3b33b8"); // accent, deeper (bottom-right)
+const WHITE = hex("#ffffff");
+const LAVENDER = hex("#c9c5ff");
+const INK = hex("#2e2a8f");
+
+/** Returns [r, g, b, a] for one sample point, or null outside the tile. */
+function shade(x, y, { radius, full }) {
+  // Tile background: rounded square (or full bleed for the iOS icon, which iOS masks itself).
+  const tile = full ? -1 : sdRoundRect(x, y, 0.5, 0.5, 0.5, 0.5, radius);
+  if (tile > 0) return null;
+  let color = mix(INDIGO_1, INDIGO_2, Math.min(1, Math.max(0, (x + y) / 2)));
+
+  // Layers, back to front: card peeking out, wallet body, clasp, clasp button.
+  const layers = [
+    [sdRoundRect(x, y, 0.5, 0.33, 0.25, 0.07, 0.035), LAVENDER],
+    [sdRoundRect(x, y, 0.5, 0.54, 0.31, 0.21, 0.075), WHITE],
+    [sdRoundRect(x, y, 0.72, 0.56, 0.13, 0.085, 0.045), LAVENDER],
+    [sdCircle(x, y, 0.735, 0.56, 0.036), INK],
+  ];
+  for (const [d, c] of layers) if (d <= 0) color = c;
+  return color;
+}
+
+function render(size, opts) {
+  const SS = 4; // supersampling grid per pixel
+  const px = Buffer.alloc(size * size * 4);
+  for (let y = 0; y < size; y++) {
+    for (let x = 0; x < size; x++) {
+      let r = 0, g = 0, b = 0, n = 0;
+      for (let sy = 0; sy < SS; sy++) {
+        for (let sx = 0; sx < SS; sx++) {
+          const c = shade((x + (sx + 0.5) / SS) / size, (y + (sy + 0.5) / SS) / size, opts);
+          if (!c) continue;
+          r += c[0]; g += c[1]; b += c[2]; n++;
+        }
+      }
+      const i = (y * size + x) * 4;
+      if (n === 0) { px[i] = px[i + 1] = px[i + 2] = px[i + 3] = 0; continue; }
+      // Premultiplied average → straight alpha.
+      px[i] = Math.round(r / n); px[i + 1] = Math.round(g / n); px[i + 2] = Math.round(b / n);
+      px[i + 3] = Math.round((255 * n) / (SS * SS));
+    }
+  }
+  return png(size, px);
+}
+
+fs.writeFileSync(path.join(outDir, "icon-192.png"), render(192, { radius: 0.22 }));
+fs.writeFileSync(path.join(outDir, "icon-512.png"), render(512, { radius: 0.22 }));
+fs.writeFileSync(path.join(outDir, "apple-touch-icon.png"), render(180, { full: true }));
 console.log("icons written to", outDir);
