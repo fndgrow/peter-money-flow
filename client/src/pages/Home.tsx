@@ -9,7 +9,7 @@ import { Empty, Money, Sheet } from "../components/ui";
 import { TxRow } from "./Transactions";
 
 export function Home() {
-  const { state, fmt, locale } = useData();
+  const { state, fmt, fmt2, locale } = useData();
   const today = todayStr();
   const ov = useMemo(() => overview(state, today), [state, today]);
   const paid = useMemo(() => billPaidMap(state.transactions), [state.transactions]);
@@ -55,17 +55,21 @@ export function Home() {
         <div className="hero">
           <div className="label">Available after upcoming payments</div>
           <div className="big">{fmt(ov.available)}</div>
+          {fmt2 && <div className="sub2">≈ {fmt2(ov.available)}</div>}
           <div className="row">
             <div>
               <div className="v">{fmt(ov.totalMoney)}</div>
+              {fmt2 && <div className="sub2">≈ {fmt2(ov.totalMoney)}</div>}
               <div className="k">Total money</div>
             </div>
             <div>
               <div className="v">{fmt(ov.owedSoon)}</div>
+              {fmt2 && <div className="sub2">≈ {fmt2(ov.owedSoon)}</div>}
               <div className="k">Owed this month</div>
             </div>
             <div>
               <div className="v">{fmt(ov.savings)}</div>
+              {fmt2 && <div className="sub2">≈ {fmt2(ov.savings)}</div>}
               <div className="k">In savings</div>
             </div>
           </div>
@@ -114,14 +118,17 @@ export function Home() {
           <div className="stat">
             <div className="k">Income</div>
             <div className="v income">{fmt(ov.month.income)}</div>
+            {fmt2 && <div className="sub2">≈ {fmt2(ov.month.income)}</div>}
           </div>
           <div className="stat">
             <div className="k">Spending</div>
             <div className="v expense">{fmt(ov.month.expense)}</div>
+            {fmt2 && <div className="sub2">≈ {fmt2(ov.month.expense)}</div>}
           </div>
           <div className="stat">
             <div className="k">Kept</div>
             <div className={`v ${ov.month.kept < 0 ? "expense" : ""}`}>{fmt(ov.month.kept)}</div>
+            {fmt2 && <div className="sub2">≈ {fmt2(ov.month.kept)}</div>}
           </div>
         </div>
 

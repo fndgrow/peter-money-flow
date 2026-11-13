@@ -117,7 +117,7 @@ export function BillForm({ existing, onClose, presetPersonId }: { existing?: Bil
 }
 
 export function PayBillForm({ bill, onClose }: { bill: Bill; onClose: () => void }) {
-  const { state, run, fmt } = useData();
+  const { state, run, fmt, fmt2, secondary, currency } = useData();
   const remaining = billRemaining(bill, billPaidMap(state.transactions));
   const defaultAccount = state.accounts.find((a) => !a.archived && a.type === "bank") ?? state.accounts.find((a) => !a.archived);
   const [amount, setAmount] = useState(String(remaining));
@@ -149,9 +149,34 @@ export function PayBillForm({ bill, onClose }: { bill: Bill; onClose: () => void
             {fmt(bill.amount)} total · <span className="bold">{fmt(remaining)} remaining</span>
           </div>
         </div>
-        <Field label="Amount paid now" className="amount" hint={partial ? `Partial payment. ${fmt(remaining - Number(amount))} will remain.` : undefined}>
+        <Field
+          label={`Amount paid now (${currency})`}
+          className="amount"
+          hint={
+            partial
+              ? `Partial payment. ${fmt(remaining - Number(amount))} will remain.`
+              : fmt2 && Number(amount) > 0
+                ? `≈ ${fmt2(Number(amount))}`
+                : undefined
+          }
+        >
           <input type="number" inputMode="decimal" step="0.01" min="0" value={amount} onChange={(e) => setAmount(e.target.value)} required autoFocus />
         </Field>
+        {secondary && (
+          <Field label={`Or type it in ${secondary.currency}`} hint={`Converted at 1 ${secondary.currency} = ${secondary.rate} ${currency}`}>
+            <input
+              type="number"
+              inputMode="decimal"
+              step="0.01"
+              min="0"
+              placeholder="0"
+              onChange={(e) => {
+                const v = Number(e.target.value);
+                if (v > 0) setAmount(String(Math.round(v * secondary.rate * 100) / 100));
+              }}
+            />
+          </Field>
+        )}
         <div className="grid2">
           <Field label="From account">
             <select value={accountId} onChange={(e) => setAccountId(e.target.value)} required>

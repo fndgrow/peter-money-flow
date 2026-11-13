@@ -241,6 +241,9 @@ const SETTING_KEYS = [
   "salary_payday",
   "salary_account_id",
   "owner_name",
+  "secondary_currency",
+  "secondary_rate",
+  "secondary_rate_date",
 ] as const;
 
 api.put(
@@ -251,6 +254,12 @@ api.put(
       if (!(key in body)) continue;
       let value = body[key];
       if (key === "salary_amount" && value !== "" && value !== null) value = num(value, "Salary amount", { min: 0 });
+      if (key === "secondary_rate" && value !== "" && value !== null) {
+        const r = Number(String(value).replace(",", "."));
+        if (!Number.isFinite(r) || r <= 0) throw new HttpError(400, "Rate must be a positive number");
+        value = r;
+      }
+      if (key === "secondary_currency" && value) value = String(value).toUpperCase().slice(0, 3);
       if (key === "salary_payday" && value !== "" && value !== null) {
         const d = Number(value);
         if (!Number.isInteger(d) || d < 1 || d > 31) throw new HttpError(400, "Payday must be 1-31");
@@ -259,6 +268,26 @@ api.put(
       setSetting(key, value === null || value === undefined ? null : String(value));
     }
     res.json(allSettings());
+  }),
+);
+
+/** Today's exchange rate: how many units of `base` one unit of `quote` is worth. */
+api.get(
+  "/rates",
+  wrap(async (req, res) => {
+    const base = String(req.query.base || "").toUpperCase();
+    const quote = String(req.query.quote || "").toUpperCase();
+    if (!/^[A-Z]{3}$/.test(base) || !/^[A-Z]{3}$/.test(quote)) throw new HttpError(400, "Give two currency codes");
+    let data: { result?: string; rates?: Record<string, number>; time_last_update_utc?: string };
+    try {
+      const r = await fetch(`https://open.er-api.com/v6/latest/${quote}`, { signal: AbortSignal.timeout(8000) });
+      data = (await r.json()) as typeof data;
+    } catch {
+      throw new HttpError(502, "Could not reach the exchange rate service");
+    }
+    const rate = data.rates?.[base];
+    if (data.result !== "success" || !rate) throw new HttpError(502, `No rate for ${quote} to ${base}`);
+    res.json({ base, quote, rate, date: new Date(data.time_last_update_utc || Date.now()).toISOString().slice(0, 10) });
   }),
 );
 

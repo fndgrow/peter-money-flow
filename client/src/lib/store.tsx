@@ -17,6 +17,9 @@ interface Store {
   loading: boolean;
   offline: boolean;
   fmt: (n: number) => string;
+  /** Formats the amount in the secondary currency, or null when none is set. */
+  fmt2: ((n: number) => string) | null;
+  secondary: { currency: string; rate: number } | null;
   locale: string;
   currency: string;
   refresh: () => Promise<void>;
@@ -121,8 +124,19 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   const currency = state?.settings.currency || "EUR";
   const locale = state?.settings.locale || "en-GB";
   const fmt = useMemo(() => makeFormatter(currency, locale), [currency, locale]);
+  const secCurrency = state?.settings.secondary_currency || "";
+  const secRate = Number(state?.settings.secondary_rate || 0);
+  const secondary = useMemo(
+    () => (secCurrency && secRate > 0 && secCurrency !== currency ? { currency: secCurrency, rate: secRate } : null),
+    [secCurrency, secRate, currency],
+  );
+  const fmt2 = useMemo(() => {
+    if (!secondary) return null;
+    const f = makeFormatter(secondary.currency, locale);
+    return (n: number) => f(n / secondary.rate);
+  }, [secondary, locale]);
 
-  const value: Store = { auth, state, loading, offline, fmt, locale, currency, refresh, refreshAuth, logout, toast, toasts, run };
+  const value: Store = { auth, state, loading, offline, fmt, fmt2, secondary, locale, currency, refresh, refreshAuth, logout, toast, toasts, run };
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;
 }
 

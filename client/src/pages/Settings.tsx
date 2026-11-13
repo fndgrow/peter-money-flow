@@ -8,7 +8,7 @@ import { Field, Sheet } from "../components/ui";
 const CURRENCIES = ["EUR", "USD", "GBP", "CHF", "PLN", "CZK", "RON", "MDL", "UAH", "RUB", "TRY", "AED", "ILS", "SEK", "NOK", "DKK", "CAD", "AUD", "JPY", "INR"];
 
 export function Settings() {
-  const { state, run, logout, refresh, toast } = useData();
+  const { state, run, logout, refresh, toast, currency: mainCurrency } = useData();
   const s = state.settings;
   const [ownerName, setOwnerName] = useState(s.owner_name ?? "");
   const [currency, setCurrency] = useState(s.currency ?? "EUR");
@@ -16,6 +16,10 @@ export function Settings() {
   const [salaryAmount, setSalaryAmount] = useState(s.salary_amount ?? "");
   const [salaryPayday, setSalaryPayday] = useState(s.salary_payday ?? "");
   const [salaryAccount, setSalaryAccount] = useState(s.salary_account_id ?? "");
+  const [secCurrency, setSecCurrency] = useState(s.secondary_currency ?? "");
+  const [secRate, setSecRate] = useState(s.secondary_rate ?? "");
+  const [secDate, setSecDate] = useState(s.secondary_rate_date ?? "");
+  const [fetchingRate, setFetchingRate] = useState(false);
   const [editCat, setEditCat] = useState<{ existing?: Category; kind: "income" | "expense" } | null>(null);
   const [editProject, setEditProject] = useState<Project | null | "new">(null);
   const [pwd, setPwd] = useState(false);
@@ -42,6 +46,34 @@ export function Settings() {
       () => api.put("/api/settings", { salary_amount: salaryAmount, salary_payday: salaryPayday, salary_account_id: salaryAccount }),
       "Salary settings saved",
     );
+  }
+
+  async function saveSecondary(e: FormEvent) {
+    e.preventDefault();
+    await run(
+      () =>
+        api.put("/api/settings", {
+          secondary_currency: secCurrency,
+          secondary_rate: secCurrency ? secRate : "",
+          secondary_rate_date: secCurrency ? secDate : "",
+        }),
+      secCurrency ? `Amounts will also show in ${secCurrency}` : "Second currency removed",
+    );
+  }
+
+  async function fetchRate() {
+    if (!secCurrency) return;
+    setFetchingRate(true);
+    try {
+      const r = await api.get<{ rate: number; date: string }>(`/api/rates?base=${mainCurrency}&quote=${secCurrency}`);
+      setSecRate(String(Math.round(r.rate * 10000) / 10000));
+      setSecDate(r.date);
+      toast(`1 ${secCurrency} = ${r.rate.toFixed(4)} ${mainCurrency} (${r.date}). Press Save to keep it.`);
+    } catch (err) {
+      toast((err as Error).message, "error");
+    } finally {
+      setFetchingRate(false);
+    }
   }
 
   async function restore(file: File) {
@@ -153,6 +185,38 @@ export function Settings() {
           <button className="btn primary" type="submit">
             Save
           </button>
+        </form>
+
+        <form className="card" onSubmit={saveSecondary}>
+          <div className="card-title">
+            <h2>Second currency</h2>
+          </div>
+          <p className="small muted mb">
+            You enter amounts in <b>{mainCurrency}</b>. Pick a second currency and every amount also shows its equivalent, for example MDL and EUR side by side.
+          </p>
+          <div className="grid2">
+            <Field label="Show amounts also in">
+              <select value={secCurrency} onChange={(e) => setSecCurrency(e.target.value)}>
+                <option value="">Off</option>
+                {CURRENCIES.filter((c) => c !== mainCurrency).map((c) => (
+                  <option key={c} value={c}>
+                    {c}
+                  </option>
+                ))}
+              </select>
+            </Field>
+            <Field label={secCurrency ? `1 ${secCurrency} = … ${mainCurrency}` : "Exchange rate"} hint={secDate ? `Rate from ${secDate}` : undefined}>
+              <input type="number" inputMode="decimal" step="0.0001" min="0" value={secRate} onChange={(e) => setSecRate(e.target.value)} disabled={!secCurrency} placeholder="19.40" />
+            </Field>
+          </div>
+          <div className="flex wrap">
+            <button className="btn primary" type="submit">
+              Save
+            </button>
+            <button className="btn" type="button" onClick={fetchRate} disabled={!secCurrency || fetchingRate}>
+              {fetchingRate ? "Fetching…" : "Fetch today's rate"}
+            </button>
+          </div>
         </form>
 
         {(["expense", "income"] as const).map((kind) => {

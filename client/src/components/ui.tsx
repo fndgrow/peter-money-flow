@@ -67,11 +67,27 @@ export function Toasts() {
   );
 }
 
-export function Money({ value, signed, className }: { value: number; signed?: boolean; className?: string }) {
-  const { fmt } = useStore();
+export function Money({ value, signed, className, dual = true }: { value: number; signed?: boolean; className?: string; dual?: boolean }) {
+  const { fmt, fmt2 } = useStore();
   const cls = signed ? (value < 0 ? "expense" : "income") : "";
   const text = signed && value > 0 ? `+${fmt(value)}` : fmt(value);
-  return <span className={`${cls} ${className ?? ""}`}>{text}</span>;
+  return (
+    <>
+      <span className={`${cls} ${className ?? ""}`}>{text}</span>
+      {dual && fmt2 && <span className="sub">≈ {fmt2(value)}</span>}
+    </>
+  );
+}
+
+/** Primary amount with the secondary-currency equivalent underneath (when configured). */
+export function Dual({ value, className }: { value: number; className?: string }) {
+  const { fmt, fmt2 } = useStore();
+  return (
+    <div className={className}>
+      <div>{fmt(value)}</div>
+      {fmt2 && <div className="sub2">≈ {fmt2(value)}</div>}
+    </div>
+  );
 }
 
 export function Segmented<T extends string>({

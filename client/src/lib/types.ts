@@ -79,6 +79,10 @@ export interface Settings {
   salary_payday?: string;
   salary_account_id?: string;
   owner_name?: string;
+  secondary_currency?: string;
+  /** How many units of the main currency one unit of the secondary currency is worth. */
+  secondary_rate?: string;
+  secondary_rate_date?: string;
 }
 
 export interface AppState {

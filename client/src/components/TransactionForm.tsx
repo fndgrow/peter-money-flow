@@ -12,7 +12,7 @@ interface Props {
 }
 
 export function TransactionForm({ initialType = "expense", existing, onClose }: Props) {
-  const { state, run, refresh } = useData();
+  const { state, run, refresh, currency, fmt2, secondary } = useData();
   const [type, setType] = useState<TxType>(existing?.type ?? initialType);
   const [amount, setAmount] = useState(existing ? String(existing.amount) : "");
   const [date, setDate] = useState(existing?.date ?? todayStr());
@@ -109,9 +109,24 @@ export function TransactionForm({ initialType = "expense", existing, onClose }: 
         {isBillPayment && <div className="banner accent">This is a payment toward a scheduled bill. Amount changes update what is still owed.</div>}
         {error && <div className="form-error">{error}</div>}
 
-        <Field label="Amount" className="amount">
+        <Field label={`Amount (${currency})`} className="amount" hint={fmt2 && Number(amount) > 0 ? `≈ ${fmt2(Number(amount))}` : undefined}>
           <input type="number" inputMode="decimal" step="0.01" min="0" placeholder="0" value={amount} onChange={(e) => setAmount(e.target.value)} autoFocus required />
         </Field>
+        {secondary && (
+          <Field label={`Or type it in ${secondary.currency}`} hint={`Converted at 1 ${secondary.currency} = ${secondary.rate} ${currency}`}>
+            <input
+              type="number"
+              inputMode="decimal"
+              step="0.01"
+              min="0"
+              placeholder="0"
+              onChange={(e) => {
+                const v = Number(e.target.value);
+                if (v > 0) setAmount(String(Math.round(v * secondary.rate * 100) / 100));
+              }}
+            />
+          </Field>
+        )}
 
         <div className="grid2">
           <Field label={type === "transfer" ? "From account" : type === "income" ? "Into account" : "From account"}>

@@ -154,6 +154,10 @@ input, select, textarea { font: inherit; color: inherit; }
 .row-item .s { font-size: 0.8rem; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .row-item .amt { font-weight: 700; text-align: right; white-space: nowrap; }
 .row-item .amt .sub { display: block; font-size: 0.75rem; color: var(--muted); font-weight: 500; }
+.sub2 { font-size: 0.75rem; color: var(--muted); font-weight: 500; }
+.hero .sub2 { color: #fff; opacity: 0.8; font-size: 0.9rem; margin-top: -8px; margin-bottom: 12px; }
+.hero .row .sub2 { font-size: 0.72rem; margin: 0; }
+.stat .sub2 { font-size: 0.7rem; }
 .income { color: var(--income); }
 .expense { color: var(--expense); }
 .muted { color: var(--muted); }

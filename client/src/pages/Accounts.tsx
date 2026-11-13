@@ -11,7 +11,7 @@ const TYPE_LABEL: Record<Account["type"], string> = { cash: "Cash", bank: "Bank 
 const TYPE_ICON: Record<Account["type"], string> = { cash: "💵", bank: "🏦", savings: "🐷" };
 
 export function Accounts() {
-  const { state, fmt, locale } = useData();
+  const { state, fmt, fmt2, locale } = useData();
   const balances = useMemo(() => accountBalances(state.accounts, state.transactions), [state]);
   const [editAccount, setEditAccount] = useState<Account | null | "new">(null);
   const [editGoal, setEditGoal] = useState<Goal | null | "new">(null);
@@ -37,13 +37,16 @@ export function Accounts() {
         <div className="hero">
           <div className="label">Total money</div>
           <div className="big">{fmt(total)}</div>
+          {fmt2 && <div className="sub2">≈ {fmt2(total)}</div>}
           <div className="row">
             <div>
               <div className="v">{fmt(total - savings)}</div>
+              {fmt2 && <div className="sub2">≈ {fmt2(total - savings)}</div>}
               <div className="k">Spendable</div>
             </div>
             <div>
               <div className="v">{fmt(savings)}</div>
+              {fmt2 && <div className="sub2">≈ {fmt2(savings)}</div>}
               <div className="k">Savings</div>
             </div>
           </div>
@@ -135,7 +138,7 @@ export function Accounts() {
 }
 
 function AccountRow({ a, balance, onEdit }: { a: Account; balance: number; onEdit: () => void }) {
-  const { fmt } = useData();
+  const { fmt, fmt2 } = useData();
   return (
     <div className="row-item" style={{ cursor: "default" }}>
       <div className="ic">{TYPE_ICON[a.type]}</div>
@@ -145,7 +148,10 @@ function AccountRow({ a, balance, onEdit }: { a: Account; balance: number; onEdi
           <Link to={`/transactions?account=${a.id}`}>Transactions</Link> · <a href="#" onClick={(e) => (e.preventDefault(), onEdit())}>Edit</a>
         </div>
       </div>
-      <div className={`amt ${balance < 0 ? "expense" : ""}`}>{fmt(balance)}</div>
+      <div className={`amt ${balance < 0 ? "expense" : ""}`}>
+        {fmt(balance)}
+        {fmt2 && <span className="sub">≈ {fmt2(balance)}</span>}
+      </div>
     </div>
   );
 }
