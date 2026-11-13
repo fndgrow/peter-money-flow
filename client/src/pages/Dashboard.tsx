@@ -231,6 +231,19 @@ export function Dashboard() {
     return out;
   }, [incomeByCat, incomeColor]);
 
+  // Spending by paying account (cash vs bank) in the period.
+  const expenseByAccount = useMemo(() => {
+    const m = new Map<number, number>();
+    for (const t of state.transactions) if (t.type === "expense" && inRange(t, range)) m.set(t.account_id, (m.get(t.account_id) ?? 0) + inMain(t));
+    return [...m.entries()]
+      .map(([id, amount]) => {
+        const a = state.accounts.find((x) => x.id === id);
+        return { id, name: a?.name ?? "?", type: a?.type ?? "bank", amount };
+      })
+      .sort((a, b) => b.amount - a.amount);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [state, range.from, range.to]);
+
   // Income by receiving account, and the biggest single entries in the period.
   const incomeByAccount = useMemo(() => {
     const m = new Map<number, number>();
@@ -616,6 +629,29 @@ export function Dashboard() {
                 <span className="tiny muted" style={{ gridColumn: "2 / 3" }}>
                   {formatDate(t.date, locale, { day: "numeric", month: "short", year: "numeric" })}
                 </span>
+              </Link>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {view === "spending" && expenseByAccount.length > 0 && (
+        <div className="card">
+          <div className="card-title">
+            <h2>Paid from</h2>
+          </div>
+          <div className="rank">
+            {expenseByAccount.map((r) => (
+              <Link key={r.id} to={`/transactions?account=${r.id}`} className="rank-row" style={{ color: "inherit" }}>
+                <span className="n">
+                  {r.type === "cash" ? "💵" : r.type === "savings" ? "💰" : "🏦"} {r.name}
+                </span>
+                <span className="amt">
+                  {fmt(r.amount)} <span className="muted tiny">{expense ? Math.round((r.amount / expense) * 100) : 0}%</span>
+                </span>
+                <div className="bar">
+                  <div style={{ width: `${(r.amount / expenseByAccount[0].amount) * 100}%`, background: "var(--expense)" }} />
+                </div>
               </Link>
             ))}
           </div>
