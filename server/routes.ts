@@ -21,6 +21,7 @@ import {
 } from "./auth.js";
 
 import { fetchRate, refreshStoredRate } from "./rates.js";
+import { previewSweep, runSweep, sweepNote } from "./sweep.js";
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
@@ -305,6 +306,9 @@ const SETTING_KEYS = [
   "secondary_rate",
   "secondary_rate_date",
   "secondary_rate_manual",
+  "sweep_enabled",
+  "sweep_from_account_id",
+  "sweep_to_account_id",
 ] as const;
 
 api.put(
@@ -326,6 +330,13 @@ api.put(
         if (!Number.isInteger(d) || d < 1 || d > 31) throw new HttpError(400, "Payday must be 1-31");
       }
       if (key === "salary_account_id" && value !== "" && value !== null) exists("accounts", id(value, "Account"), "Account");
+      if ((key === "sweep_from_account_id" || key === "sweep_to_account_id") && value !== "" && value !== null) exists("accounts", id(value, "Account"), "Account");
+      if (key === "sweep_enabled") {
+        const on = value === "1" || value === true;
+        value = on ? "1" : "";
+        // Remember when the rule was switched on so earlier months are never closed retroactively.
+        if (on && !allSettings().sweep_enabled) setSetting("sweep_enabled_since", new Date().toISOString().slice(0, 7));
+      }
       setSetting(key, value === null || value === undefined ? null : String(value));
     }
     // A new second currency (or switching back to automatic) gets today's rate straight away.
@@ -796,6 +807,40 @@ api.delete(
     db.prepare("DELETE FROM transactions WHERE id = ?").run(tid);
     if (existing.bill_id) syncBillStatus(existing.bill_id);
     res.json({ ok: true });
+  }),
+);
+
+// ---------- month close (savings sweep) ----------
+
+api.get(
+  "/sweep/preview",
+  wrap((req, res) => {
+    const month = String(req.query.month || new Date().toISOString().slice(0, 7));
+    if (!/^\d{4}-\d{2}$/.test(month)) throw new HttpError(400, "month must be YYYY-MM");
+    res.json(previewSweep(month));
+  }),
+);
+
+api.post(
+  "/sweep/run",
+  wrap((req, res) => {
+    const month = String(req.body?.month || "");
+    if (!/^\d{4}-\d{2}$/.test(month)) throw new HttpError(400, "month must be YYYY-MM");
+    if (month > new Date().toISOString().slice(0, 7)) throw new HttpError(400, "That month has not started yet");
+    const r = runSweep(month);
+    if (!r.preview.enabled) throw new HttpError(400, "Set up the month-close rule in Settings first");
+    res.json(r);
+  }),
+);
+
+api.post(
+  "/sweep/undo",
+  wrap((req, res) => {
+    const month = String(req.body?.month || "");
+    if (!/^\d{4}-\d{2}$/.test(month)) throw new HttpError(400, "month must be YYYY-MM");
+    const r = db.prepare("DELETE FROM transactions WHERE note = ? AND type = 'transfer'").run(sweepNote(month));
+    if (allSettings().sweep_last === month) setSetting("sweep_last", null);
+    res.json({ removed: Number(r.changes) });
   }),
 );
 

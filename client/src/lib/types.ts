@@ -93,6 +93,25 @@ export interface Settings {
   secondary_rate_date?: string;
   /** "1" when the user types the rate by hand instead of the automatic daily update. */
   secondary_rate_manual?: string;
+  /** Month close: move what was kept into savings (or cover a shortfall from savings). */
+  sweep_enabled?: string;
+  sweep_from_account_id?: string;
+  sweep_to_account_id?: string;
+  sweep_last?: string;
+  sweep_enabled_since?: string;
+}
+
+export interface SweepPreview {
+  month: string;
+  enabled: boolean;
+  done: boolean;
+  income: number;
+  expense: number;
+  kept: number;
+  amount: number;
+  currency: string;
+  capped: boolean;
+  note: string;
 }
 
 export interface AppState {

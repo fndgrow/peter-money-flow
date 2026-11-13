@@ -6,6 +6,7 @@ import { fileURLToPath } from "node:url";
 import { seedDefaults, fillCurrencies, migrateIncomeCategories, migrateExpenseCategories, DB_PATH } from "./db.js";
 import { api } from "./routes.js";
 import { startRateUpdater } from "./rates.js";
+import { startSweepScheduler } from "./sweep.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const PORT = Number(process.env.PORT || 3000);
@@ -15,6 +16,7 @@ fillCurrencies();
 migrateIncomeCategories();
 migrateExpenseCategories();
 startRateUpdater();
+startSweepScheduler();
 
 const app = express();
 app.disable("x-powered-by");

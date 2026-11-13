@@ -22,6 +22,9 @@ export function Settings() {
   const [secRate, setSecRate] = useState(s.secondary_rate ?? "");
   const [secDate, setSecDate] = useState(s.secondary_rate_date ?? "");
   const [secManual, setSecManual] = useState(s.secondary_rate_manual === "1");
+  const [sweepOn, setSweepOn] = useState(s.sweep_enabled === "1");
+  const [sweepFrom, setSweepFrom] = useState(s.sweep_from_account_id ?? "");
+  const [sweepTo, setSweepTo] = useState(s.sweep_to_account_id ?? "");
   const [fetchingRate, setFetchingRate] = useState(false);
   const [editCat, setEditCat] = useState<{ existing?: Category; kind: "income" | "expense"; parentId?: number } | null>(null);
   const [editProject, setEditProject] = useState<Project | null | "new">(null);
@@ -61,6 +64,16 @@ export function Settings() {
           ...(secManual ? { secondary_rate: secCurrency ? secRate : "", secondary_rate_date: secCurrency ? secDate : "" } : {}),
         }),
       secCurrency ? `Amounts will also show in ${secCurrency}` : "Second currency removed",
+    );
+  }
+
+  async function saveSweep(e: FormEvent) {
+    e.preventDefault();
+    if (sweepOn && (!sweepFrom || !sweepTo)) return toast("Choose both accounts", "error");
+    if (sweepOn && sweepFrom === sweepTo) return toast("Choose two different accounts", "error");
+    await run(
+      () => api.put("/api/settings", { sweep_enabled: sweepOn ? "1" : "", sweep_from_account_id: sweepFrom, sweep_to_account_id: sweepTo }),
+      sweepOn ? "Month close is on" : "Month close is off",
     );
   }
 
@@ -185,6 +198,48 @@ export function Settings() {
                 ))}
             </select>
           </Field>
+          <button className="btn primary" type="submit">
+            Save
+          </button>
+        </form>
+
+        <form className="card" onSubmit={saveSweep}>
+          <div className="card-title">
+            <h2>Month close → savings</h2>
+          </div>
+          <p className="small muted mb">
+            On the 1st of each month the app looks at the month that just ended. What you kept (income minus spending) moves from your bank account into savings.
+            If you spent more than you earned, the shortfall comes back from savings. You can also close a month early from the home screen.
+          </p>
+          <label className="check">
+            <input type="checkbox" checked={sweepOn} onChange={(e) => setSweepOn(e.target.checked)} /> Move what I keep each month into savings
+          </label>
+          <div className="grid2">
+            <Field label="From (day-to-day account)">
+              <select value={sweepFrom} onChange={(e) => setSweepFrom(e.target.value)} disabled={!sweepOn}>
+                <option value="">Choose…</option>
+                {state.accounts
+                  .filter((a) => !a.archived && a.type !== "savings")
+                  .map((a) => (
+                    <option key={a.id} value={a.id}>
+                      {a.name} ({a.currency})
+                    </option>
+                  ))}
+              </select>
+            </Field>
+            <Field label="Into (savings account)" hint={state.accounts.some((a) => !a.archived && a.type === "savings" && a.currency === state.accounts.find((x) => String(x.id) === sweepFrom)?.currency) ? undefined : sweepFrom ? "Tip: a savings account in the same currency avoids conversions." : undefined}>
+              <select value={sweepTo} onChange={(e) => setSweepTo(e.target.value)} disabled={!sweepOn}>
+                <option value="">Choose…</option>
+                {state.accounts
+                  .filter((a) => !a.archived && a.type === "savings")
+                  .map((a) => (
+                    <option key={a.id} value={a.id}>
+                      {a.name} ({a.currency})
+                    </option>
+                  ))}
+              </select>
+            </Field>
+          </div>
           <button className="btn primary" type="submit">
             Save
           </button>
