@@ -33,8 +33,13 @@ interface Store {
   logout: () => Promise<void>;
   toast: (text: string, kind?: Toast["kind"]) => void;
   toasts: Toast[];
-  /** Run a mutation, then reload state. Shows errors as toasts. Returns true on success. */
-  run: (fn: () => Promise<unknown>, successText?: string) => Promise<boolean>;
+  /**
+   * Run a mutation, then reload state. Shows errors as toasts. Returns true on success.
+   * `optimistic` is applied to the local state immediately so the screen updates before the server answers.
+   */
+  run: (fn: () => Promise<unknown>, successText?: string, optimistic?: (s: AppState) => AppState) => Promise<boolean>;
+  /** True while the live-update connection to the server is open. */
+  live: boolean;
 }
 
 const Ctx = createContext<Store | null>(null);
@@ -45,7 +50,9 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   const [loading, setLoading] = useState(true);
   const [offline, setOffline] = useState(!navigator.onLine);
   const [toasts, setToasts] = useState<Toast[]>([]);
+  const [live, setLive] = useState(false);
   const toastId = useRef(0);
+  const inflight = useRef(0);
 
   const toast = useCallback((text: string, kind: Toast["kind"] = "ok") => {
     const id = ++toastId.current;
@@ -99,12 +106,36 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     window.addEventListener("online", on);
     window.addEventListener("offline", off);
     document.addEventListener("visibilitychange", vis);
+    // Warm up the other screens while idle so switching tabs is instant.
+    const idle = (window as unknown as { requestIdleCallback?: (cb: () => void) => number }).requestIdleCallback ?? ((cb: () => void) => window.setTimeout(cb, 1500));
+    idle(() => {
+      import("../pages/Dashboard");
+      import("../pages/People");
+      import("../pages/Accounts");
+      import("../pages/Settings");
+    });
     return () => {
       window.removeEventListener("online", on);
       window.removeEventListener("offline", off);
       document.removeEventListener("visibilitychange", vis);
     };
   }, [auth, refresh]);
+
+  // Live updates from the server (another device, the month close, a rate refresh).
+  useEffect(() => {
+    if (!auth?.authed || typeof EventSource === "undefined") return;
+    const es = new EventSource("/api/events");
+    es.onopen = () => setLive(true);
+    es.onerror = () => setLive(false);
+    es.addEventListener("changed", () => {
+      // Our own writes refresh themselves; only react to changes made elsewhere.
+      if (inflight.current === 0) refresh();
+    });
+    return () => {
+      es.close();
+      setLive(false);
+    };
+  }, [auth?.authed, refresh]);
 
   const logout = useCallback(async () => {
     await api.post("/api/logout");
@@ -113,15 +144,20 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const run = useCallback(
-    async (fn: () => Promise<unknown>, successText?: string) => {
+    async (fn: () => Promise<unknown>, successText?: string, optimistic?: (s: AppState) => AppState) => {
+      if (optimistic) setState((s) => (s ? optimistic(s) : s));
+      inflight.current += 1;
       try {
         await fn();
         await refresh();
         if (successText) toast(successText);
         return true;
       } catch (e) {
+        if (optimistic) await refresh(); // roll back to what the server has
         toast((e as Error).message || "Something went wrong", "error");
         return false;
+      } finally {
+        inflight.current -= 1;
       }
     },
     [refresh, toast],
@@ -174,6 +210,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     toast,
     toasts,
     run,
+    live,
   };
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;
 }

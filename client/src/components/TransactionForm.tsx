@@ -34,14 +34,14 @@ export function TransactionForm({ initialType = "expense", existing, onClose }: 
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
 
-  // Income and expenses happen in the day-to-day currency (the second currency, e.g. MDL) when one is set up;
-  // income only goes into cash or bank accounts; savings are filled through transfers. Transfers can use any account.
+  // Income and expenses happen in the day-to-day currency (the second currency, e.g. MDL) when one is set up.
+  // Income can land anywhere (bank, cash or savings); expenses come out of bank or cash. Transfers can use any account.
   const dayToDay = secondary && state.accounts.some((a) => !a.archived && a.currency === secondary.currency) ? secondary.currency : null;
   const accounts = state.accounts.filter(
     (a) =>
       (!a.archived || a.id === existing?.account_id || a.id === existing?.to_account_id) &&
       (type === "transfer" || !dayToDay || a.currency === dayToDay || a.id === existing?.account_id) &&
-      (type !== "income" || a.type !== "savings" || a.id === existing?.account_id),
+      (type !== "expense" || a.type !== "savings" || a.id === existing?.account_id),
   );
   const people = state.people.filter((p) => !p.archived || p.id === existing?.person_id);
   const projects = state.projects.filter((p) => p.status === "active" || p.id === existing?.project_id);
@@ -94,9 +94,30 @@ export function TransactionForm({ initialType = "expense", existing, onClose }: 
       project_id: type === "transfer" ? null : projectId || null,
       note,
     };
+    // What the saved row will look like, so the screen can update right away.
+    const draft: Transaction = {
+      id: existing?.id ?? -Date.now(),
+      type,
+      amount: Number(String(amount).replace(",", ".")) || 0,
+      date,
+      account_id: Number(accountId),
+      to_account_id: type === "transfer" ? Number(toAccountId) || null : null,
+      to_amount: crossCurrency ? Number(toAmount) || null : null,
+      category_id: type === "transfer" ? null : Number(categoryId) || null,
+      person_id: type === "transfer" ? null : Number(personId) || null,
+      bill_id: existing?.bill_id ?? null,
+      project_id: type === "transfer" ? null : Number(projectId) || null,
+      note: note.trim() || null,
+      created_at: existing?.created_at ?? new Date().toISOString(),
+    };
+    const sortDesc = (list: Transaction[]) => [...list].sort((a, b) => b.date.localeCompare(a.date) || b.id - a.id);
     const ok = await run(
       () => (existing ? api.put(`/api/transactions/${existing.id}`, body) : api.post("/api/transactions", body)),
       existing ? "Saved" : type === "income" ? "Income added" : type === "expense" ? "Expense added" : "Transfer recorded",
+      (s) => ({
+        ...s,
+        transactions: sortDesc(existing ? s.transactions.map((t) => (t.id === existing.id ? draft : t)) : [draft, ...s.transactions]),
+      }),
     );
     setBusy(false);
     if (ok) onClose();
@@ -104,8 +125,8 @@ export function TransactionForm({ initialType = "expense", existing, onClose }: 
 
   async function remove() {
     if (!existing) return;
-    const ok = await run(() => api.del(`/api/transactions/${existing.id}`), "Deleted");
-    if (ok) onClose();
+    onClose();
+    await run(() => api.del(`/api/transactions/${existing.id}`), "Deleted", (s) => ({ ...s, transactions: s.transactions.filter((t) => t.id !== existing.id) }));
   }
 
   const title = existing ? "Edit transaction" : type === "income" ? "Add income" : type === "expense" ? "Add expense" : "Transfer";
@@ -169,10 +190,11 @@ export function TransactionForm({ initialType = "expense", existing, onClose }: 
         )}
 
         <div className="grid2">
-          <Field label={type === "transfer" ? "From account" : type === "income" ? "Into account" : "From account"}>
+          <Field label={type === "transfer" ? "From account" : type === "income" ? "Into" : "Paid from"}>
             <select value={accountId} onChange={(e) => setAccountId(e.target.value)} required>
               {accounts.map((a) => (
                 <option key={a.id} value={a.id}>
+                  {a.type === "savings" ? "💰 " : a.type === "cash" ? "💵 " : "🏦 "}
                   {a.name} ({a.currency})
                 </option>
               ))}

@@ -7,6 +7,8 @@ import { seedDefaults, fillCurrencies, migrateIncomeCategories, migrateExpenseCa
 import { api } from "./routes.js";
 import { startRateUpdater } from "./rates.js";
 import { startSweepScheduler } from "./sweep.js";
+import { broadcastChange, eventsHandler } from "./events.js";
+import { isAuthed } from "./auth.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const PORT = Number(process.env.PORT || 3000);
@@ -37,6 +39,19 @@ app.get("/robots.txt", (_req, res) => {
   res.type("text/plain").send("User-agent: *\nDisallow: /\n");
 });
 
+// Live updates: push a "changed" event after every successful write.
+app.use("/api", (req, res, next) => {
+  if (req.method !== "GET") {
+    res.on("finish", () => {
+      if (res.statusCode < 400 && !/^\/(login|logout|setup|password|email)$/.test(req.path)) broadcastChange();
+    });
+  }
+  next();
+});
+app.get("/api/events", (req, res) => {
+  if (!isAuthed(req)) return res.status(401).end();
+  eventsHandler(req, res);
+});
 app.use("/api", api);
 
 // Serve the built client (dist/client) in production.

@@ -37,7 +37,7 @@ export function Accounts() {
           </button>
         </div>
 
-        {active.length > 2 && (
+        {active.length > 3 && (
           <div className="hero">
             <div className="label">Total money</div>
             <div className="big">{fmt(total)}</div>
@@ -57,16 +57,31 @@ export function Accounts() {
           </div>
         )}
 
-        <div className="card">
-          <div className="list">
-            {(["cash", "bank", "savings"] as const).flatMap((type) =>
-              active
-                .filter((a) => a.type === type)
-                .map((a) => <AccountRow key={a.id} a={a} balance={balances.get(a.id) ?? 0} onEdit={() => setEditAccount(a)} onOpen={() => setOpen(a)} />),
-            )}
-            {active.length === 0 && <Empty>No accounts yet.</Empty>}
+        {(
+          [
+            { key: "current", title: "My current status", hint: "Bank + cash, the money you live on this month", list: active.filter((a) => a.type !== "savings") },
+            { key: "savings", title: "My savings", hint: "What you keep aside", list: active.filter((a) => a.type === "savings") },
+          ] as const
+        ).map((g) => (
+          <div className="card" key={g.key}>
+            <div className="card-title" style={{ alignItems: "flex-start" }}>
+              <div>
+                <h2>{g.title}</h2>
+                <div className="tiny muted">{g.hint}</div>
+              </div>
+              <div style={{ textAlign: "right" }}>
+                <div className="bold">{fmt(g.list.reduce((s, a) => s + inMain(a), 0))}</div>
+                {fmt2 && <div className="sub2">≈ {fmt2(g.list.reduce((s, a) => s + inMain(a), 0))}</div>}
+              </div>
+            </div>
+            <div className="list">
+              {g.list.map((a) => (
+                <AccountRow key={a.id} a={a} balance={balances.get(a.id) ?? 0} onEdit={() => setEditAccount(a)} onOpen={() => setOpen(a)} />
+              ))}
+              {g.list.length === 0 && <Empty>No account here yet.</Empty>}
+            </div>
           </div>
-        </div>
+        ))}
 
         <button className="btn block mb" onClick={() => setEditAccount("new")}>
           + Add account

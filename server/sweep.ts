@@ -1,4 +1,5 @@
 import { db, allSettings, setSetting, nowIso } from "./db.js";
+import { broadcastChange } from "./events.js";
 
 /**
  * Month close: what was kept in a month (income − spending) moves from the day-to-day
@@ -96,11 +97,12 @@ export function previewSweep(month: string): SweepPreview {
   let amount = kept, capped = false, note = "";
   if (cfg.enabled && cfg.from && cfg.to) {
     if (kept > 0) {
-      const bal = accountBalance(cfg.from.id);
+      // Money can come from any day-to-day account in the same currency (bank first, then cash).
+      const bal = currentAccounts(cfg.from).reduce((s, a) => s + Math.max(0, accountBalance(a.id)), 0);
       if (bal < kept) {
-        amount = Math.max(0, bal);
+        amount = Math.max(0, Math.round(bal * 100) / 100);
         capped = true;
-        note = `Only ${amount} ${cur} is in ${cfg.from.name}, so that is the most that can move.`;
+        note = `Only ${amount} ${cur} is in your current accounts, so that is the most that can move.`;
       }
     } else if (kept < 0) {
       const savCur = cfg.to.currency || main;
@@ -120,6 +122,14 @@ export function sweepNote(month: string) {
   return `Month close ${month}`;
 }
 
+/** The "current status" accounts: the configured one first, then the other non-savings accounts in the same currency. */
+function currentAccounts(from: AccountRow): AccountRow[] {
+  const others = db
+    .prepare("SELECT id, name, type, currency, opening_balance, archived FROM accounts WHERE archived = 0 AND type != 'savings' AND id != ? AND COALESCE(currency,'') = COALESCE(?, '') ORDER BY type = 'bank' DESC, id")
+    .all(from.id, from.currency) as unknown as AccountRow[];
+  return [from, ...others];
+}
+
 /** Perform the month close for `month`. Returns the created transaction id, or null when nothing to do. */
 export function runSweep(month: string): { id: number | null; preview: SweepPreview } {
   const p = previewSweep(month);
@@ -135,13 +145,23 @@ export function runSweep(month: string): { id: number | null; preview: SweepPrev
   const date = monthEnd(month);
   let r;
   if (p.amount > 0) {
-    // bank → savings
-    r = db
-      .prepare(
-        `INSERT INTO transactions (type, amount, date, account_id, to_account_id, to_amount, note, created_at)
-         VALUES ('transfer', ?, ?, ?, ?, ?, ?, ?)`,
-      )
-      .run(p.amount, date, cfg.from.id, cfg.to.id, fromCur === toCur ? null : convert(p.amount, fromCur, toCur), sweepNote(month), nowIso());
+    // current accounts → savings, taking from the configured account first, then the others.
+    let left = p.amount;
+    let lastId: number | bigint = 0;
+    for (const a of currentAccounts(cfg.from)) {
+      if (left < 0.01) break;
+      const take = Math.min(left, Math.max(0, accountBalance(a.id)));
+      if (take < 0.01) continue;
+      const amt = Math.round(take * 100) / 100;
+      lastId = db
+        .prepare(
+          `INSERT INTO transactions (type, amount, date, account_id, to_account_id, to_amount, note, created_at)
+           VALUES ('transfer', ?, ?, ?, ?, ?, ?, ?)`,
+        )
+        .run(amt, date, a.id, cfg.to.id, fromCur === toCur ? null : convert(amt, fromCur, toCur), sweepNote(month), nowIso()).lastInsertRowid;
+      left -= amt;
+    }
+    r = { lastInsertRowid: lastId };
   } else {
     // savings → bank, amount expressed in the savings currency, arriving as |p.amount| in the bank currency
     const fromSavings = convert(-p.amount, fromCur, toCur);
@@ -175,7 +195,10 @@ export function autoSweep() {
     const p = previewSweep(month);
     if (p.done) return;
     const r = runSweep(month);
-    if (r.id) console.log(`Month close ${month}: moved ${r.preview.amount} ${r.preview.currency} ${r.preview.amount > 0 ? "to" : "from"} savings`);
+    if (r.id) {
+      console.log(`Month close ${month}: moved ${r.preview.amount} ${r.preview.currency} ${r.preview.amount > 0 ? "to" : "from"} savings`);
+      broadcastChange();
+    }
   } catch (e) {
     console.warn("Month close failed:", (e as Error).message);
   }

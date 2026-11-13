@@ -1,7 +1,8 @@
-import { Suspense, lazy } from "react";
-import { NavLink, Navigate, Route, Routes } from "react-router-dom";
+import { Suspense, lazy, useState } from "react";
+import { NavLink, Navigate, Route, Routes, useLocation } from "react-router-dom";
 import { useStore } from "./lib/store";
 import { Icons, Toasts } from "./components/ui";
+import { TransactionForm } from "./components/TransactionForm";
 import { Login } from "./pages/Login";
 import { Home } from "./pages/Home";
 import { Transactions } from "./pages/Transactions";
@@ -20,7 +21,9 @@ const NAV = [
 ];
 
 export default function App() {
-  const { auth, state, loading, offline } = useStore();
+  const { auth, state, loading, offline, live } = useStore();
+  const [quickAdd, setQuickAdd] = useState(false);
+  const location = useLocation();
 
   if (!auth || (auth.authed && loading && !state)) {
     return <div className="spinner" />;
@@ -39,7 +42,7 @@ export default function App() {
         <div className="card center">
           <h2>Can't reach the server</h2>
           <p className="muted small mt">You're offline and there is no saved copy of your data yet. Connect and try again.</p>
-          <button className="btn primary mt" onClick={() => location.reload()}>
+          <button className="btn primary mt" onClick={() => window.location.reload()}>
             Retry
           </button>
         </div>
@@ -65,6 +68,11 @@ export default function App() {
         </NavLink>
       </nav>
       <div className="content">
+        {!offline && (
+          <div className={`sync ${live ? "" : "off"}`} title={live ? "Live: changes from other devices appear automatically" : "Reconnecting…"}>
+            <span className="dot" /> {live ? "live" : "…"}
+          </div>
+        )}
         {offline && <div className="banner" style={{ margin: "12px 16px 0", maxWidth: 688 }}>Offline. Showing your last synced data. Changes need a connection.</div>}
         <Suspense fallback={<div className="spinner" />}>
           <Routes>
@@ -79,6 +87,12 @@ export default function App() {
           </Routes>
         </Suspense>
       </div>
+      {location.pathname !== "/" && (
+        <button className="fab" aria-label="Add expense or income" onClick={() => setQuickAdd(true)}>
+          +
+        </button>
+      )}
+      {quickAdd && <TransactionForm initialType="expense" onClose={() => setQuickAdd(false)} />}
       <Toasts />
     </div>
   );

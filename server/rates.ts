@@ -1,4 +1,5 @@
 import { allSettings, setSetting } from "./db.js";
+import { broadcastChange } from "./events.js";
 
 /** How many units of `quote` one unit of `base` buys today (base=EUR, quote=MDL → about 20). */
 export async function fetchRate(base: string, quote: string): Promise<{ rate: number; date: string }> {
@@ -20,6 +21,7 @@ export async function refreshStoredRate(): Promise<void> {
     setSetting("secondary_rate", String(Math.round(rate * 10000) / 10000));
     setSetting("secondary_rate_date", date);
     console.log(`Exchange rate updated: 1 ${main} = ${rate} ${secondary} (${date})`);
+    broadcastChange();
   } catch (e) {
     console.warn("Exchange rate refresh failed:", (e as Error).message);
   }

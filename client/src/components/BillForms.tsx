@@ -164,9 +164,25 @@ export function PayBillForm({ bill, onClose }: { bill: Bill; onClose: () => void
   async function submit(e: FormEvent) {
     e.preventDefault();
     setBusy(true);
+    const draft = {
+      id: -Date.now(),
+      type: "expense" as const,
+      amount: Number(amount) || 0,
+      date,
+      account_id: Number(accountId),
+      to_account_id: null,
+      to_amount: null,
+      category_id: bill.category_id,
+      person_id: bill.person_id,
+      bill_id: bill.id,
+      project_id: null,
+      note: note.trim() || bill.title,
+      created_at: new Date().toISOString(),
+    };
     const ok = await run(
       () => api.post(`/api/bills/${bill.id}/payments`, { amount, account_id: accountId, date, note }),
       partial ? `Recorded. ${fmtBill(remaining - paidInBill)} still to pay` : "Paid in full",
+      (s) => ({ ...s, transactions: [draft, ...s.transactions].sort((a, b) => b.date.localeCompare(a.date) || b.id - a.id) }),
     );
     setBusy(false);
     if (ok) onClose();
@@ -249,9 +265,10 @@ export function SalaryConfirmForm({ onClose }: { onClose: () => void }) {
           <Field label="Into account">
             <select value={accountId} onChange={(e) => setAccountId(e.target.value)} required>
               {state.accounts
-                .filter((a) => !a.archived && a.type !== "savings")
+                .filter((a) => !a.archived)
                 .map((a) => (
                   <option key={a.id} value={a.id}>
+                    {a.type === "savings" ? "💰 " : a.type === "cash" ? "💵 " : "🏦 "}
                     {a.name} ({a.currency})
                   </option>
                 ))}
