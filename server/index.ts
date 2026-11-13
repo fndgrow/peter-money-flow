@@ -45,5 +45,5 @@ if (fs.existsSync(clientDir)) {
 }
 
 app.listen(PORT, () => {
-  console.log(`Peter Money Flow listening on http://localhost:${PORT}  (db: ${DB_PATH})`);
+  console.log(`My money listening on http://localhost:${PORT}  (db: ${DB_PATH})`);
 });

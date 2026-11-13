@@ -1,4 +1,4 @@
-# Peter Money Flow
+# My money
 
 A personal finance app for **one user**. One login, one dashboard, one transaction history.
 It tracks your salary, other income, personal spending, savings, and payments to people.

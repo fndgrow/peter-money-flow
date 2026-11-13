@@ -11,8 +11,8 @@ export default defineConfig({
       registerType: "autoUpdate",
       includeAssets: ["icons/icon-192.png", "icons/icon-512.png", "icons/apple-touch-icon.png"],
       manifest: {
-        name: "Peter Money Flow",
-        short_name: "Money Flow",
+        name: "My money",
+        short_name: "My money",
         description: "Your money: income, spending, savings and payments to people.",
         theme_color: "#0f766e",
         background_color: "#f6f7f9",

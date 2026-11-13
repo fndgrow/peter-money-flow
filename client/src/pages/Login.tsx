@@ -35,7 +35,7 @@ export function Login() {
             <path d="M3 9l7-4 6 3 5-4" />
           </svg>
         </div>
-        <h1 className="center">Peter Money Flow</h1>
+        <h1 className="center">My money</h1>
         <p className="center muted small mt mb">
           {setup ? "Welcome. Choose a password to protect your data. There is only one account: yours." : "Enter your password to continue."}
         </p>

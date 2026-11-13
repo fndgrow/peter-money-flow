@@ -49,7 +49,7 @@ export default function App() {
     <div className="app">
       <nav className="nav">
         <div className="nav-brand">
-          <span className="dot" style={{ width: 10, height: 10, borderRadius: 5, background: "var(--accent)", display: "inline-block" }} /> Money Flow
+          <span className="dot" style={{ width: 10, height: 10, borderRadius: 5, background: "var(--accent)", display: "inline-block" }} /> My money
         </div>
         {NAV.map((n) => (
           <NavLink key={n.to} to={n.to} end={n.to === "/"} className={({ isActive }) => (isActive ? "active" : "")}>

@@ -742,7 +742,7 @@ api.get(
       rowId ? ((list.find((x) => x.id === rowId)?.name as string) ?? "") : "";
 
     const wb = new ExcelJS.Workbook();
-    wb.creator = "Peter Money Flow";
+    wb.creator = "My money";
     const money = `#,##0.00 "${currency}"`;
 
     const ws = wb.addWorksheet("Transactions");
@@ -862,7 +862,7 @@ api.get(
     as.getRow(1).font = { bold: true };
 
     res.setHeader("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
-    res.setHeader("Content-Disposition", `attachment; filename="money-flow-${new Date().toISOString().slice(0, 10)}.xlsx"`);
+    res.setHeader("Content-Disposition", `attachment; filename="my-money-${new Date().toISOString().slice(0, 10)}.xlsx"`);
     await wb.xlsx.write(res);
     res.end();
   }),
