@@ -44,7 +44,7 @@ export function Home() {
 
   return (
     <>
-        </div>
+      <div className="main">
 
         <div className="hero">
           <div className="label">Total money</div>
