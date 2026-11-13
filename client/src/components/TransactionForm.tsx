@@ -21,7 +21,7 @@ export function TransactionForm({ initialType = "expense", existing, onClose }: 
   const salaryAccount = active.find((a) => String(a.id) === state.settings.salary_account_id);
   const incomeAccount = salaryAccount ?? active.find((a) => a.type === "bank" && secondary && a.currency === secondary.currency);
   const defaultAccount =
-    (initialType === "income" ? incomeAccount : undefined) ?? active.find((a) => a.type === "bank") ?? active[0];
+    (initialType === "income" ? incomeAccount : undefined) ?? active.find((a) => a.type === "bank") ?? active.find((a) => a.type !== "savings") ?? active[0];
   const [accountId, setAccountId] = useState(String(existing?.account_id ?? defaultAccount?.id ?? ""));
   const [toAccountId, setToAccountId] = useState(String(existing?.to_account_id ?? ""));
   const [toAmount, setToAmount] = useState(existing?.to_amount != null ? String(existing.to_amount) : "");
@@ -32,7 +32,12 @@ export function TransactionForm({ initialType = "expense", existing, onClose }: 
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
 
-  const accounts = state.accounts.filter((a) => !a.archived || a.id === existing?.account_id || a.id === existing?.to_account_id);
+  // Income only goes into cash or bank accounts; savings are filled through transfers.
+  const accounts = state.accounts.filter(
+    (a) =>
+      (!a.archived || a.id === existing?.account_id || a.id === existing?.to_account_id) &&
+      (type !== "income" || a.type !== "savings" || a.id === existing?.account_id),
+  );
   const people = state.people.filter((p) => !p.archived || p.id === existing?.person_id);
   const projects = state.projects.filter((p) => p.status === "active" || p.id === existing?.project_id);
   const isBillPayment = !!existing?.bill_id;
@@ -111,7 +116,7 @@ export function TransactionForm({ initialType = "expense", existing, onClose }: 
                 setType(v);
                 setCategoryId("");
                 if (!existing) {
-                  const next = v === "income" ? (incomeAccount ?? defaultAccount) : (active.find((a) => a.type === "bank") ?? active[0]);
+                  const next = v === "income" ? (incomeAccount ?? active.find((a) => a.type !== "savings")) : (active.find((a) => a.type === "bank") ?? active[0]);
                   if (next) setAccountId(String(next.id));
                 }
               }}

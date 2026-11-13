@@ -253,7 +253,7 @@ export function SalaryConfirmForm({ onClose }: { onClose: () => void }) {
           <Field label="Into account">
             <select value={accountId} onChange={(e) => setAccountId(e.target.value)} required>
               {state.accounts
-                .filter((a) => !a.archived)
+                .filter((a) => !a.archived && a.type !== "savings")
                 .map((a) => (
                   <option key={a.id} value={a.id}>
                     {a.name} ({a.currency})

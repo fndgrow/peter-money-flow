@@ -177,7 +177,7 @@ export function Settings() {
             <select value={salaryAccount} onChange={(e) => setSalaryAccount(e.target.value)}>
               <option value="">Choose at confirmation</option>
               {state.accounts
-                .filter((a) => !a.archived)
+                .filter((a) => !a.archived && a.type !== "savings")
                 .map((a) => (
                   <option key={a.id} value={a.id}>
                     {a.name}
