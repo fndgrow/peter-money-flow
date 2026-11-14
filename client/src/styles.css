@@ -375,3 +375,18 @@ table.tbl tr.cur td { font-weight: 800; }
 .quick-menu .row-item.pay .ic { background: var(--accent-soft); color: var(--accent); }
 .quick-menu .row-item.owed .ic { background: var(--income-soft); }
 .seg button.active.in { color: var(--income); }
+
+/* ---------- monthly plan ---------- */
+.plan-row { display: grid; grid-template-columns: 34px 1fr auto; gap: 4px 10px; align-items: center; padding: 8px 0; border-bottom: 1px solid var(--line); color: inherit; }
+.plan-row:last-child { border-bottom: 0; }
+.plan-row .pi { font-size: 1.15rem; text-align: center; }
+.plan-row .pn { font-weight: 700; }
+.plan-row .pa { text-align: right; font-weight: 800; white-space: nowrap; }
+.plan-row .pa .sub { display: block; font-size: 0.72rem; color: var(--muted); font-weight: 500; }
+.plan-row .bar { grid-column: 2 / -1; height: 6px; border-radius: 999px; background: var(--card-2); overflow: hidden; }
+.plan-row .bar > div { height: 100%; border-radius: 999px; background: var(--accent); }
+.plan-row.over .bar > div { background: var(--expense); }
+.plan-row.done .bar > div { background: var(--income); }
+.plan-total { display: flex; justify-content: space-between; align-items: baseline; gap: 10px; padding: 10px 0 2px; font-size: 0.86rem; }
+.plan-row.done { background: color-mix(in srgb, var(--income-soft) 55%, transparent); border-radius: 10px; padding-left: 6px; padding-right: 6px; }
+.plan-row.over { background: color-mix(in srgb, var(--expense-soft) 45%, transparent); border-radius: 10px; padding-left: 6px; padding-right: 6px; }

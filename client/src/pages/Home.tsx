@@ -5,6 +5,7 @@ import { addDays, billPaidMap, billRemaining, daysBetween, formatDate, monthKey,
 import type { Bill, Transaction } from "../lib/types";
 import { TransactionForm } from "../components/TransactionForm";
 import { BillForm, PayBillForm } from "../components/BillForms";
+import { BudgetCard } from "../components/Budget";
 import { Empty } from "../components/ui";
 import { TxRow } from "./Transactions";
 
@@ -150,6 +151,8 @@ export function Home() {
             </div>
           )}
         </div>
+
+        <BudgetCard />
 
         {owedToMe.length > 0 && (
           <div className="card">

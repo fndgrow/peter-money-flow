@@ -90,6 +90,14 @@ CREATE TABLE IF NOT EXISTS transactions (
 );
 CREATE INDEX IF NOT EXISTS idx_tx_date ON transactions(date);
 CREATE INDEX IF NOT EXISTS idx_tx_bill ON transactions(bill_id);
+CREATE TABLE IF NOT EXISTS budget_items (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  name TEXT NOT NULL,
+  category_id INTEGER REFERENCES categories(id) ON DELETE SET NULL,
+  amount REAL NOT NULL,
+  currency TEXT,
+  sort INTEGER NOT NULL DEFAULT 0
+);
 `);
 
 // ---- migrations for databases created by earlier versions ----

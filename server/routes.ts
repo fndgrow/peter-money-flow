@@ -291,6 +291,7 @@ api.get("/state", (_req, res) => {
     projects: db.prepare("SELECT * FROM projects ORDER BY status, name COLLATE NOCASE").all(),
     bills: db.prepare("SELECT * FROM bills ORDER BY due_date, id").all(),
     goals: db.prepare("SELECT * FROM goals ORDER BY id").all(),
+    budget: db.prepare("SELECT * FROM budget_items ORDER BY sort, id").all(),
     transactions: db.prepare("SELECT * FROM transactions ORDER BY date DESC, id DESC").all(),
   });
 });
@@ -848,9 +849,52 @@ api.post(
   }),
 );
 
+// ---------- monthly plan (budget list) ----------
+// A list of what I expect to spend each month. It never moves money; the app only compares it with real spending.
+
+function readBudgetItem(body: Record<string, unknown>) {
+  const name = str(body.name, "Name", { required: true, max: 60 }) as string;
+  const categoryId = id(body.category_id, "Category", true);
+  if (categoryId !== null && categoryKind(categoryId) !== "expense") throw new HttpError(400, "Choose a spending category");
+  const amount = num(body.amount, "Amount", { min: 0.01 }) as number;
+  const currency = currencyCode(body.currency, "Currency", rates().secondary || rates().main);
+  return { name, categoryId, amount, currency };
+}
+
+api.post(
+  "/budget",
+  wrap((req, res) => {
+    const b = readBudgetItem(req.body ?? {});
+    const r = db
+      .prepare("INSERT INTO budget_items (name, category_id, amount, currency, sort) VALUES (?, ?, ?, ?, (SELECT COALESCE(MAX(sort),0)+1 FROM budget_items))")
+      .run(b.name, b.categoryId, b.amount, b.currency);
+    res.json({ id: Number(r.lastInsertRowid) });
+  }),
+);
+
+api.put(
+  "/budget/:id",
+  wrap((req, res) => {
+    const bid = id(req.params.id, "Item") as number;
+    exists("budget_items", bid, "Item");
+    const b = readBudgetItem(req.body ?? {});
+    db.prepare("UPDATE budget_items SET name = ?, category_id = ?, amount = ?, currency = ? WHERE id = ?").run(b.name, b.categoryId, b.amount, b.currency, bid);
+    res.json({ ok: true });
+  }),
+);
+
+api.delete(
+  "/budget/:id",
+  wrap((req, res) => {
+    const bid = id(req.params.id, "Item") as number;
+    db.prepare("DELETE FROM budget_items WHERE id = ?").run(bid);
+    res.json({ ok: true });
+  }),
+);
+
 // ---------- backup / restore ----------
 
-const TABLES = ["settings", "accounts", "categories", "people", "projects", "bills", "goals", "transactions"] as const;
+const TABLES = ["settings", "accounts", "categories", "people", "projects", "bills", "goals", "budget_items", "transactions"] as const;
 
 api.get("/backup", (_req, res) => {
   const out: Record<string, unknown> = { version: 1, exported_at: nowIso() };

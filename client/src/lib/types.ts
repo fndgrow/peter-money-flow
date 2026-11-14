@@ -125,5 +125,16 @@ export interface AppState {
   projects: Project[];
   bills: Bill[];
   goals: Goal[];
+  budget: BudgetItem[];
   transactions: Transaction[];
+}
+
+/** One line of the monthly plan: what I expect to spend on something each month. Informational only. */
+export interface BudgetItem {
+  id: number;
+  name: string;
+  category_id: number | null;
+  amount: number;
+  currency: string | null;
+  sort: number;
 }
