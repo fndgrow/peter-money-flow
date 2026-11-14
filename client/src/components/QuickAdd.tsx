@@ -16,29 +16,31 @@ export function QuickAdd() {
   const [adding, setAdding] = useState<TxType | null>(null);
   const [pickBill, setPickBill] = useState(false);
   const [paying, setPaying] = useState<Bill | null>(null);
-  const [newBill, setNewBill] = useState(false);
+  const [newBill, setNewBill] = useState<"out" | "in" | null>(null);
   const paid = useMemo(() => billPaidMap(state), [state]);
   const openBills = useMemo(
-    () => state.bills.filter((b) => b.status === "open").sort((a, b) => a.due_date.localeCompare(b.due_date)),
+    () => state.bills.filter((b) => b.status === "open" && b.direction !== "in").sort((a, b) => a.due_date.localeCompare(b.due_date)),
     [state.bills],
   );
 
   function personName(id: number | null) {
     return id ? state.people.find((p) => p.id === id)?.name : undefined;
   }
-  function choose(what: TxType | "pay") {
+  function choose(what: TxType | "pay" | "owed") {
     setMenu(false);
     if (what === "pay") {
       if (openBills.length) setPickBill(true);
-      else setNewBill(true);
-    } else setAdding(what);
+      else setNewBill("out");
+    } else if (what === "owed") setNewBill("in");
+    else setAdding(what);
   }
 
-  const options: { key: TxType | "pay"; icon: string; label: string; hint: string; cls: string }[] = [
+  const options: { key: TxType | "pay" | "owed"; icon: string; label: string; hint: string; cls: string }[] = [
     { key: "expense", icon: "－", label: "Expense", hint: "Money you spent", cls: "out" },
     { key: "income", icon: "＋", label: "Income", hint: "Money you received", cls: "in" },
     { key: "transfer", icon: "⇄", label: "Transfer", hint: "Between your accounts", cls: "" },
     { key: "pay", icon: "✓", label: "Record payment", hint: "Pay someone you owe", cls: "pay" },
+    { key: "owed", icon: "🤝", label: "Someone owes me", hint: "A service you did, not paid yet", cls: "owed" },
   ];
 
   return (
@@ -63,7 +65,7 @@ export function QuickAdd() {
       )}
       {adding && <TransactionForm initialType={adding} onClose={() => setAdding(null)} />}
       {paying && <PayBillForm bill={paying} onClose={() => setPaying(null)} />}
-      {newBill && <BillForm onClose={() => setNewBill(false)} />}
+      {newBill && <BillForm direction={newBill} onClose={() => setNewBill(null)} />}
       {pickBill && (
         <Sheet title="Which payment?" onClose={() => setPickBill(false)}>
           <div className="list">
@@ -94,7 +96,7 @@ export function QuickAdd() {
             style={{ width: "100%" }}
             onClick={() => {
               setPickBill(false);
-              setNewBill(true);
+              setNewBill("out");
             }}
           >
             Schedule a new payment

@@ -373,3 +373,5 @@ table.tbl tr.cur td { font-weight: 800; }
 .quick-menu .row-item.in .ic { background: var(--income-soft); color: var(--income); }
 .quick-menu .row-item.out .ic { background: var(--expense-soft); color: var(--expense); }
 .quick-menu .row-item.pay .ic { background: var(--accent-soft); color: var(--accent); }
+.quick-menu .row-item.owed .ic { background: var(--income-soft); }
+.seg button.active.in { color: var(--income); }

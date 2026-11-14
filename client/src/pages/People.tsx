@@ -10,7 +10,7 @@ import { TxRow } from "./Transactions";
 import { TransactionForm } from "../components/TransactionForm";
 import type { Transaction } from "../lib/types";
 
-type Tab = "due" | "people" | "history";
+type Tab = "due" | "owed" | "people" | "history";
 
 export function People() {
   const { state, fmt, fmtIn, conv, currency, locale, run } = useData();
@@ -18,7 +18,7 @@ export function People() {
   const paid = useMemo(() => billPaidMap(state), [state]);
   const accCur = (accountId: number) => state.accounts.find((a) => a.id === accountId)?.currency || currency;
   const [tab, setTab] = useState<Tab>("due");
-  const [newBill, setNewBill] = useState<{ personId?: number } | null>(null);
+  const [newBill, setNewBill] = useState<{ personId?: number; direction?: "out" | "in" } | null>(null);
   const [editBill, setEditBill] = useState<Bill | null>(null);
   const [paying, setPaying] = useState<Bill | null>(null);
   const [billMenu, setBillMenu] = useState<Bill | null>(null);
@@ -26,20 +26,26 @@ export function People() {
   const [editPerson, setEditPerson] = useState<Person | null | "new">(null);
   const [editTx, setEditTx] = useState<Transaction | null>(null);
 
-  const open = state.bills.filter((b) => b.status === "open").sort((a, b) => a.due_date.localeCompare(b.due_date));
+  const openAll = state.bills.filter((b) => b.status === "open").sort((a, b) => a.due_date.localeCompare(b.due_date));
+  const open = openAll.filter((b) => b.direction !== "in"); // what I have to pay
+  const owedIn = openAll.filter((b) => b.direction === "in"); // what people owe me
   const overdue = open.filter((b) => b.due_date < today);
   const later = open.filter((b) => b.due_date >= today);
   const closed = state.bills.filter((b) => b.status !== "open").sort((a, b) => b.due_date.localeCompare(a.due_date));
   const totalOwed = open.reduce((s, b) => s + conv(billRemaining(b, paid), b.currency, currency), 0);
+  const totalOwedToMe = owedIn.reduce((s, b) => s + conv(billRemaining(b, paid), b.currency, currency), 0);
 
   const personStats = useMemo(() => {
-    const m = new Map<number, { owed: number; paid: number; count: number }>();
-    for (const p of state.people) m.set(p.id, { owed: 0, paid: 0, count: 0 });
+    const m = new Map<number, { owed: number; owesMe: number; paid: number; count: number }>();
+    for (const p of state.people) m.set(p.id, { owed: 0, owesMe: 0, paid: 0, count: 0 });
     for (const b of state.bills) {
       if (b.person_id === null) continue;
       const s = m.get(b.person_id);
       if (!s) continue;
-      if (b.status === "open") s.owed += conv(billRemaining(b, paid), b.currency, currency);
+      if (b.status === "open") {
+        if (b.direction === "in") s.owesMe += conv(billRemaining(b, paid), b.currency, currency);
+        else s.owed += conv(billRemaining(b, paid), b.currency, currency);
+      }
     }
     for (const t of state.transactions) {
       if (t.person_id === null || t.type !== "expense") continue;
@@ -62,13 +68,17 @@ export function People() {
     const cat = state.categories.find((c) => c.id === b.category_id);
     return (
       <button className="row-item" onClick={() => setBillMenu(b)}>
-        <div className="ic">{cat?.icon ?? "👤"}</div>
+        <div className="ic">{b.direction === "in" ? "🤝" : (cat?.icon ?? "👤")}</div>
         <div className="body">
           <div className="t">{b.title}</div>
           <div className="s">
             {personName(b.person_id) ? `${personName(b.person_id)} · ` : ""}
             {b.status !== "open" ? (
-              <span className={b.status === "paid" ? "income" : "muted"}>{b.status === "paid" ? "Paid" : "Cancelled"} · {formatDate(b.due_date, locale)}</span>
+              <span className={b.status === "paid" ? "income" : "muted"}>
+                {b.status === "paid" ? (b.direction === "in" ? "Received" : "Paid") : "Cancelled"} · {formatDate(b.due_date, locale)}
+              </span>
+            ) : b.direction === "in" ? (
+              d < 0 ? <span className="warn bold">{-d}d late</span> : `expected ${formatDate(b.due_date, locale)}`
             ) : d < 0 ? (
               <span className="expense bold">{-d}d overdue</span>
             ) : d === 0 ? (
@@ -84,7 +94,7 @@ export function People() {
             </div>
           )}
         </div>
-        <div className="amt">
+        <div className={`amt ${b.direction === "in" ? "income" : ""}`}>
           {b.status === "open" ? fmtIn(b.currency)(rem) : fmtIn(b.currency)(b.amount)}
           {b.status === "open" && rem < b.amount - 0.004 && <span className="sub">of {fmtIn(b.currency)(b.amount)}</span>}
         </div>
@@ -100,14 +110,23 @@ export function People() {
       <div className="main">
         <div className="between mb">
           <h1>People & Bills</h1>
-          <button className="btn primary sm" onClick={() => setNewBill({})}>
-            + Schedule
-          </button>
+          {tab === "owed" ? (
+            <button className="btn primary sm" onClick={() => setNewBill({ direction: "in" })}>
+              + They owe me
+            </button>
+          ) : (
+            <button className="btn primary sm" onClick={() => setNewBill({})}>
+              + Schedule
+            </button>
+          )}
         </div>
 
         <div className="seg mb">
           <button className={tab === "due" ? "active" : ""} onClick={() => setTab("due")}>
             To pay
+          </button>
+          <button className={tab === "owed" ? "active in" : ""} onClick={() => setTab("owed")}>
+            Owed to me
           </button>
           <button className={tab === "people" ? "active" : ""} onClick={() => setTab("people")}>
             People
@@ -158,6 +177,35 @@ export function People() {
           </>
         )}
 
+        {tab === "owed" && (
+          <>
+            <div className="stats" style={{ gridTemplateColumns: "1fr 1fr" }}>
+              <div className="stat">
+                <div className="k">Owed to me</div>
+                <div className="v income">{fmt(totalOwedToMe)}</div>
+              </div>
+              <div className="stat">
+                <div className="k">Open</div>
+                <div className="v">{owedIn.length}</div>
+              </div>
+            </div>
+            <div className="card">
+              <div className="card-title">
+                <h2>Waiting to be paid</h2>
+              </div>
+              {owedIn.length === 0 ? (
+                <Empty>Nobody owes you anything right now. Tap “+ They owe me” when you did a service and haven't been paid yet.</Empty>
+              ) : (
+                <div className="list">
+                  {owedIn.map((b) => (
+                    <BillItem key={b.id} b={b} />
+                  ))}
+                </div>
+              )}
+            </div>
+          </>
+        )}
+
         {tab === "people" && (
           <div className="card">
             <div className="card-title">
@@ -187,7 +235,12 @@ export function People() {
                           {s.owed > 0 ? (
                             <>
                               <span className="warn">{fmt(s.owed)}</span>
-                              <span className="sub">owed</span>
+                              <span className="sub">I owe</span>
+                            </>
+                          ) : s.owesMe > 0 ? (
+                            <>
+                              <span className="income">{fmt(s.owesMe)}</span>
+                              <span className="sub">owes me</span>
                             </>
                           ) : (
                             <span className="pill good">Settled</span>
@@ -227,15 +280,15 @@ export function People() {
               <Money value={billMenu.amount} currency={billMenu.currency} />
             </div>
             <div className="between">
-              <span className="muted">Paid so far</span>
+              <span className="muted">{billMenu.direction === "in" ? "Received so far" : "Paid so far"}</span>
               <Money value={paid.get(billMenu.id) ?? 0} currency={billMenu.currency} />
             </div>
             <div className="between bold">
-              <span>Remaining</span>
+              <span>{billMenu.direction === "in" ? "Still owed to me" : "Remaining"}</span>
               <Money value={billRemaining(billMenu, paid)} currency={billMenu.currency} />
             </div>
             <div className="between">
-              <span className="muted">Due</span>
+              <span className="muted">{billMenu.direction === "in" ? "Expected by" : "Due"}</span>
               <span>{formatDate(billMenu.due_date, locale, { day: "numeric", month: "long", year: "numeric" })}</span>
             </div>
             {billMenu.note && <div className="small muted mt">{billMenu.note}</div>}
@@ -269,7 +322,7 @@ export function People() {
                   setPaying(b);
                 }}
               >
-                Record a payment
+                {billMenu.direction === "in" ? "They paid me" : "Record a payment"}
               </button>
             )}
             <button
@@ -294,7 +347,19 @@ export function People() {
                 Skip this time
               </button>
             )}
-            {billMenu.status === "open" ? (
+            {billMenu.direction === "in" ? (
+              <button
+                className="btn danger"
+                onClick={async () => {
+                  const b = billMenu;
+                  if (!window.confirm(`Delete "${b.title}"? Anything already received stays in your income.`)) return;
+                  setBillMenu(null);
+                  await run(() => api.del(`/api/bills/${b.id}`), "Deleted");
+                }}
+              >
+                Delete
+              </button>
+            ) : billMenu.status === "open" ? (
               <button
                 className="btn danger"
                 onClick={async () => {
@@ -388,7 +453,7 @@ export function People() {
         </Sheet>
       )}
 
-      {newBill && <BillForm presetPersonId={newBill.personId} onClose={() => setNewBill(null)} />}
+      {newBill && <BillForm presetPersonId={newBill.personId} direction={newBill.direction} onClose={() => setNewBill(null)} />}
       {editBill && <BillForm existing={editBill} onClose={() => setEditBill(null)} />}
       {paying && <PayBillForm bill={paying} onClose={() => setPaying(null)} />}
       {editPerson && <PersonForm existing={editPerson === "new" ? undefined : editPerson} onClose={() => setEditPerson(null)} />}

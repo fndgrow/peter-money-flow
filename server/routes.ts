@@ -187,8 +187,8 @@ function syncBillStatus(billId: number) {
     const recurrence = bill.recurrence as string;
     if (recurrence !== "none") {
       db.prepare(
-        `INSERT INTO bills (title, person_id, category_id, amount, due_date, recurrence, status, note, created_at, currency)
-         VALUES (?, ?, ?, ?, ?, ?, 'open', ?, ?, ?)`,
+        `INSERT INTO bills (title, person_id, category_id, amount, due_date, recurrence, status, note, created_at, currency, direction)
+         VALUES (?, ?, ?, ?, ?, ?, 'open', ?, ?, ?, ?)`,
       ).run(
         bill.title as string,
         bill.person_id as number | null,
@@ -199,6 +199,7 @@ function syncBillStatus(billId: number) {
         bill.note as string | null,
         nowIso(),
         (bill.currency as string | null) || rates().main,
+        (bill.direction as string) || "out",
       );
     }
   } else if (paid < amount - 0.004 && status === "paid") {
@@ -608,15 +609,18 @@ function readBill(body: Record<string, unknown>) {
   const title = str(body.title, "Title", { required: true, max: 120 }) as string;
   const personId = id(body.person_id, "Person", true);
   exists("people", personId, "Person");
+  // "out": I owe someone (an expense when paid). "in": someone owes me (an income when they pay).
+  const direction = oneOf(body.direction, "Direction", ["out", "in"] as const, "out");
+  const kind = direction === "in" ? "income" : "expense";
   let categoryId = id(body.category_id, "Category", true);
-  if (categoryId !== null && categoryKind(categoryId) !== "expense") throw new HttpError(400, "Category must be an expense category");
-  if (categoryId === null) categoryId = systemCategory("people");
+  if (categoryId !== null && categoryKind(categoryId) !== kind) throw new HttpError(400, `Category must be an ${kind} category`);
+  if (categoryId === null) categoryId = systemCategory(direction === "in" ? "people_in" : "people");
   const amount = num(body.amount, "Amount", { min: 0.01 }) as number;
   const dueDate = dateStr(body.due_date, "Due date") as string;
   const recurrence = oneOf(body.recurrence, "Repeat", ["none", "weekly", "monthly", "yearly"] as const, "none");
   const note = str(body.note, "Note", { max: 500 });
   const currency = currencyCode(body.currency, "Currency", rates().main);
-  return { title, personId, categoryId, amount, dueDate, recurrence, note, currency };
+  return { title, personId, categoryId, amount, dueDate, recurrence, note, currency, direction };
 }
 
 api.post(
@@ -625,10 +629,10 @@ api.post(
     const b = readBill(req.body ?? {});
     const r = db
       .prepare(
-        `INSERT INTO bills (title, person_id, category_id, amount, due_date, recurrence, status, note, created_at, currency)
-         VALUES (?, ?, ?, ?, ?, ?, 'open', ?, ?, ?)`,
+        `INSERT INTO bills (title, person_id, category_id, amount, due_date, recurrence, status, note, created_at, currency, direction)
+         VALUES (?, ?, ?, ?, ?, ?, 'open', ?, ?, ?, ?)`,
       )
-      .run(b.title, b.personId, b.categoryId, b.amount, b.dueDate, b.recurrence, b.note, nowIso(), b.currency);
+      .run(b.title, b.personId, b.categoryId, b.amount, b.dueDate, b.recurrence, b.note, nowIso(), b.currency, b.direction);
     res.json({ id: Number(r.lastInsertRowid) });
   }),
 );
@@ -640,8 +644,8 @@ api.put(
     exists("bills", bid, "Bill");
     const b = readBill(req.body ?? {});
     db.prepare(
-      "UPDATE bills SET title = ?, person_id = ?, category_id = ?, amount = ?, due_date = ?, recurrence = ?, note = ?, currency = ? WHERE id = ?",
-    ).run(b.title, b.personId, b.categoryId, b.amount, b.dueDate, b.recurrence, b.note, b.currency, bid);
+      "UPDATE bills SET title = ?, person_id = ?, category_id = ?, amount = ?, due_date = ?, recurrence = ?, note = ?, currency = ?, direction = ? WHERE id = ?",
+    ).run(b.title, b.personId, b.categoryId, b.amount, b.dueDate, b.recurrence, b.note, b.currency, b.direction, bid);
     syncBillStatus(bid);
     res.json({ ok: true });
   }),
@@ -669,8 +673,8 @@ api.post(
     if (bill.recurrence === "none") throw new HttpError(400, "This payment does not repeat");
     db.prepare("UPDATE bills SET status = 'cancelled' WHERE id = ?").run(bid);
     db.prepare(
-      `INSERT INTO bills (title, person_id, category_id, amount, due_date, recurrence, status, note, created_at, currency)
-       VALUES (?, ?, ?, ?, ?, ?, 'open', ?, ?, ?)`,
+      `INSERT INTO bills (title, person_id, category_id, amount, due_date, recurrence, status, note, created_at, currency, direction)
+       VALUES (?, ?, ?, ?, ?, ?, 'open', ?, ?, ?, ?)`,
     ).run(
       bill.title as string,
       bill.person_id as number | null,
@@ -681,6 +685,7 @@ api.post(
       bill.note as string | null,
       nowIso(),
       (bill.currency as string | null) || rates().main,
+      (bill.direction as string) || "out",
     );
     res.json({ ok: true });
   }),
@@ -709,13 +714,15 @@ api.post(
     exists("accounts", accountId, "Account");
     const date = dateStr(req.body?.date, "Date") as string;
     const note = str(req.body?.note, "Note", { max: 500 });
-    const categoryId = (bill.category_id as number | null) ?? systemCategory("people");
+    // Money I owe goes out as an expense; money owed to me comes in as income.
+    const incoming = bill.direction === "in";
+    const categoryId = (bill.category_id as number | null) ?? systemCategory(incoming ? "people_in" : "people");
     const r = db
       .prepare(
         `INSERT INTO transactions (type, amount, date, account_id, category_id, person_id, bill_id, note, created_at)
-         VALUES ('expense', ?, ?, ?, ?, ?, ?, ?, ?)`,
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       )
-      .run(amount, date, accountId, categoryId, bill.person_id as number | null, bid, note ?? (bill.title as string), nowIso());
+      .run(incoming ? "income" : "expense", amount, date, accountId, categoryId, bill.person_id as number | null, bid, note ?? (bill.title as string), nowIso());
     syncBillStatus(bid);
     res.json({ id: Number(r.lastInsertRowid) });
   }),

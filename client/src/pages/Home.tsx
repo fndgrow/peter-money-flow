@@ -19,8 +19,9 @@ export function Home() {
   const [newBill, setNewBill] = useState(false);
 
   const horizon = addDays(today, 30);
+  const owedToMe = state.bills.filter((b) => b.status === "open" && b.direction === "in").sort((a, b) => a.due_date.localeCompare(b.due_date));
   const upcoming = state.bills
-    .filter((b) => b.status === "open" && b.due_date <= horizon)
+    .filter((b) => b.status === "open" && b.direction !== "in" && b.due_date <= horizon)
     .sort((a, b) => a.due_date.localeCompare(b.due_date))
     .slice(0, 6);
   const recent = state.transactions.slice(0, 5);
@@ -149,6 +150,42 @@ export function Home() {
             </div>
           )}
         </div>
+
+        {owedToMe.length > 0 && (
+          <div className="card">
+            <div className="card-title">
+              <h2>Owed to me</h2>
+              <span className="bold income">{fmt(ov.owedToMe)}</span>
+            </div>
+            <div className="list">
+              {owedToMe.slice(0, 5).map((b) => {
+                const rem = billRemaining(b, paid);
+                const d = daysBetween(today, b.due_date);
+                return (
+                  <button key={b.id} className="row-item" onClick={() => setPaying(b)}>
+                    <div className="ic">🤝</div>
+                    <div className="body">
+                      <div className="t">{b.title}</div>
+                      <div className="s">
+                        {personName(b.person_id) ? `${personName(b.person_id)} · ` : ""}
+                        {d < 0 ? <span className="warn bold">{-d} days late</span> : `expected ${formatDate(b.due_date, locale)}`}
+                      </div>
+                    </div>
+                    <div className="amt income">
+                      {fmtIn(b.currency)(rem)}
+                      {rem < b.amount - 0.004 && <span className="sub">of {fmtIn(b.currency)(b.amount)}</span>}
+                    </div>
+                  </button>
+                );
+              })}
+            </div>
+            {owedToMe.length > 5 && (
+              <Link to="/people" className="link small">
+                See all {owedToMe.length}
+              </Link>
+            )}
+          </div>
+        )}
 
         <div className="card">
           <div className="card-title">

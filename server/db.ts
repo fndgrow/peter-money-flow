@@ -102,6 +102,7 @@ addColumn("bills", "currency", "TEXT"); // currency the bill is owed in
 addColumn("transactions", "to_amount", "REAL"); // amount received on a transfer between currencies
 addColumn("categories", "parent_id", "INTEGER REFERENCES categories(id) ON DELETE SET NULL"); // one level of sub-categories
 addColumn("user", "email", "TEXT"); // login email (required at sign-in once set)
+addColumn("bills", "direction", "TEXT NOT NULL DEFAULT 'out'"); // 'out': I pay someone; 'in': someone pays me
 
 /** Older rows have no currency: assume the main currency. Safe to run on every start. */
 export function fillCurrencies() {
@@ -262,4 +263,13 @@ export function nowIso() {
 export function removeSalaryFeature() {
   db.prepare("UPDATE categories SET system = NULL WHERE system = 'salary'").run();
   db.prepare("DELETE FROM settings WHERE key IN ('salary_amount', 'salary_payday', 'salary_account_id')").run();
+}
+
+/** Income category used when someone pays back what they owe you. Created once, kept as a system category. */
+export function ensureReceivableCategory() {
+  const row = db.prepare("SELECT id FROM categories WHERE system = 'people_in'").get();
+  if (row) return;
+  db.prepare(
+    "INSERT INTO categories (name, kind, icon, sort, system) VALUES ('Received from people', 'income', '🤝', (SELECT COALESCE(MAX(sort),0)+1 FROM categories WHERE kind = 'income'), 'people_in')",
+  ).run();
 }

@@ -152,7 +152,8 @@ export interface Overview {
   spendable: number; // money in cash + bank accounts
   savings: number;
   owedSoon: number; // open bills due by end of this month (incl. overdue)
-  owedTotal: number; // all open bills
+  owedTotal: number; // all open bills I have to pay
+  owedToMe: number; // what other people still owe me
   overdueCount: number;
   available: number; // spendable - owedSoon
   /** Single-pot view: everything you had before this month started (total money minus this month's kept). */
@@ -174,10 +175,14 @@ export function overview(state: AppState, today = todayStr()): Overview {
   const paid = billPaidMap(state);
   const month = monthKey(today);
   const end = monthEnd(month);
-  let owedSoon = 0, owedTotal = 0, overdueCount = 0;
+  let owedSoon = 0, owedTotal = 0, overdueCount = 0, owedToMe = 0;
   for (const b of state.bills) {
     if (b.status !== "open") continue;
     const rem = c.conv(billRemaining(b, paid), b.currency || c.main, c.main);
+    if (b.direction === "in") {
+      owedToMe += rem;
+      continue;
+    }
     owedTotal += rem;
     if (b.due_date <= end) owedSoon += rem;
     if (b.due_date < today && rem > 0) overdueCount += 1;
@@ -190,6 +195,7 @@ export function overview(state: AppState, today = todayStr()): Overview {
     savings,
     owedSoon,
     owedTotal,
+    owedToMe,
     overdueCount,
     available: spendable - owedSoon,
     savedBefore: spendable + savings - ms.kept,

@@ -263,6 +263,7 @@ export async function buildWorkbook(convert: Convert, billPaid: (billId: number)
   const bs = wb.addWorksheet("Payments");
   bs.columns = [
     { header: "Due date", key: "due", width: 12, style: { numFmt: "yyyy-mm-dd" } },
+    { header: "Who pays", key: "direction", width: 12 },
     { header: "Title", key: "title", width: 24 },
     { header: "Person", key: "person", width: 16 },
     { header: "Category", key: "category", width: 22 },
@@ -278,6 +279,7 @@ export async function buildWorkbook(convert: Convert, billPaid: (billId: number)
     const paid = billPaid(b.id as number);
     bs.addRow({
       due: toDate(b.due_date as string),
+      direction: b.direction === "in" ? "They pay me" : "I pay",
       title: b.title,
       person: name(people, b.person_id),
       category: catLabel(b.category_id),
@@ -291,7 +293,7 @@ export async function buildWorkbook(convert: Convert, billPaid: (billId: number)
     });
   }
   styleHeader(bs);
-  freezeAndFilter(bs, 11);
+  freezeAndFilter(bs, 12);
 
   // ---------- Accounts ----------
   const as = wb.addWorksheet("Accounts");

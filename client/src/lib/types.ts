@@ -52,6 +52,8 @@ export interface Bill {
   created_at: string;
   /** Currency the bill is owed in. */
   currency: string;
+  /** "out": I pay someone. "in": someone owes me and pays me back. */
+  direction: "out" | "in";
 }
 
 export interface Goal {
