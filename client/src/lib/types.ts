@@ -54,6 +54,8 @@ export interface Bill {
   currency: string;
   /** "out": I pay someone. "in": someone owes me and pays me back. */
   direction: "out" | "in";
+  /** Company (project) the record is with, when it is a company rather than a person. */
+  project_id: number | null;
 }
 
 export interface Goal {

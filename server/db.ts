@@ -103,6 +103,7 @@ addColumn("transactions", "to_amount", "REAL"); // amount received on a transfer
 addColumn("categories", "parent_id", "INTEGER REFERENCES categories(id) ON DELETE SET NULL"); // one level of sub-categories
 addColumn("user", "email", "TEXT"); // login email (required at sign-in once set)
 addColumn("bills", "direction", "TEXT NOT NULL DEFAULT 'out'"); // 'out': I pay someone; 'in': someone pays me
+addColumn("bills", "project_id", "INTEGER REFERENCES projects(id) ON DELETE SET NULL"); // company that owes me (or that a payment relates to)
 
 /** Older rows have no currency: assume the main currency. Safe to run on every start. */
 export function fillCurrencies() {

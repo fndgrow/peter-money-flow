@@ -163,11 +163,11 @@ export function Home() {
                 const d = daysBetween(today, b.due_date);
                 return (
                   <button key={b.id} className="row-item" onClick={() => setPaying(b)}>
-                    <div className="ic">🤝</div>
+                    <div className="ic">{b.project_id ? "🏢" : "🤝"}</div>
                     <div className="body">
                       <div className="t">{b.title}</div>
                       <div className="s">
-                        {personName(b.person_id) ? `${personName(b.person_id)} · ` : ""}
+                        {(personName(b.person_id) ?? state.projects.find((p) => p.id === b.project_id)?.name) ? `${personName(b.person_id) ?? state.projects.find((p) => p.id === b.project_id)?.name} · ` : ""}
                         {d < 0 ? <span className="warn bold">{-d} days late</span> : `expected ${formatDate(b.due_date, locale)}`}
                       </div>
                     </div>

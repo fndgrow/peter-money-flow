@@ -61,6 +61,10 @@ export function People() {
   function personName(id: number | null) {
     return id ? state.people.find((p) => p.id === id)?.name : undefined;
   }
+  /** Who the record is with: the person, or the company when it is a company that owes me. */
+  function whoName(b: Bill) {
+    return personName(b.person_id) ?? (b.project_id ? state.projects.find((p) => p.id === b.project_id)?.name : undefined);
+  }
 
   function BillItem({ b }: { b: Bill }) {
     const rem = billRemaining(b, paid);
@@ -68,11 +72,11 @@ export function People() {
     const cat = state.categories.find((c) => c.id === b.category_id);
     return (
       <button className="row-item" onClick={() => setBillMenu(b)}>
-        <div className="ic">{b.direction === "in" ? "🤝" : (cat?.icon ?? "👤")}</div>
+        <div className="ic">{b.direction === "in" ? (b.project_id ? "🏢" : "🤝") : (cat?.icon ?? "👤")}</div>
         <div className="body">
           <div className="t">{b.title}</div>
           <div className="s">
-            {personName(b.person_id) ? `${personName(b.person_id)} · ` : ""}
+            {whoName(b) ? `${whoName(b)} · ` : ""}
             {b.status !== "open" ? (
               <span className={b.status === "paid" ? "income" : "muted"}>
                 {b.status === "paid" ? (b.direction === "in" ? "Received" : "Paid") : "Cancelled"} · {formatDate(b.due_date, locale)}

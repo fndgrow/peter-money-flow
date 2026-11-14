@@ -28,6 +28,9 @@ export function BillForm({
   const [currency, setCurrency] = useState(existing?.currency ?? mainCurrency);
   const [title, setTitle] = useState(existing?.title ?? "");
   const [personId, setPersonId] = useState(String(existing?.person_id ?? presetPersonId ?? ""));
+  // For "in" records the debtor can be a person or a company; encoded as "p:<id>" / "c:<id>" in one select.
+  const [debtor, setDebtor] = useState(existing?.project_id ? `c:${existing.project_id}` : existing?.person_id ?? presetPersonId ? `p:${existing?.person_id ?? presetPersonId}` : "");
+  const companies = state.projects.filter((p) => p.status === "active" || p.id === existing?.project_id);
   const [categoryId, setCategoryId] = useState(String(existing?.category_id ?? defaultCat?.id ?? ""));
   const [amount, setAmount] = useState(existing ? String(existing.amount) : "");
   const [dueDate, setDueDate] = useState(existing?.due_date ?? todayStr());
@@ -45,7 +48,20 @@ export function BillForm({
       const r = await api.post<{ id: number }>("/api/people", { name: name.trim() });
       await refresh();
       setPersonId(String(r.id));
+      setDebtor(`p:${r.id}`);
       if (!title) setTitle(name.trim());
+    } catch (e) {
+      setError((e as Error).message);
+    }
+  }
+
+  async function addCompany() {
+    const name = window.prompt("Company name");
+    if (!name?.trim()) return;
+    try {
+      const r = await api.post<{ id: number }>("/api/projects", { name: name.trim() });
+      await refresh();
+      setDebtor(`c:${r.id}`);
     } catch (e) {
       setError((e as Error).message);
     }
@@ -54,7 +70,10 @@ export function BillForm({
   async function submit(e: FormEvent) {
     e.preventDefault();
     setBusy(true);
-    const body = { title, person_id: personId || null, category_id: categoryId || null, amount, currency, due_date: dueDate, recurrence: incoming ? "none" : recurrence, note, direction };
+    const who = incoming
+      ? { person_id: debtor.startsWith("p:") ? debtor.slice(2) : null, project_id: debtor.startsWith("c:") ? debtor.slice(2) : null }
+      : { person_id: personId || null, project_id: null };
+    const body = { title, ...who, category_id: categoryId || null, amount, currency, due_date: dueDate, recurrence: incoming ? "none" : recurrence, note, direction };
     const ok = await run(
       () => (existing ? api.put(`/api/bills/${existing.id}`, body) : api.post("/api/bills", body)),
       existing ? "Saved" : incoming ? "Recorded. It shows under Owed to me." : "Payment scheduled",
@@ -84,24 +103,51 @@ export function BillForm({
             autoFocus
           />
         </Field>
-        <Field
-          label={incoming ? "Who owes me" : "Person (optional)"}
-          hint={incoming ? undefined : "Leave empty for bills that are not tied to a person, like rent or a subscription."}
-        >
-          <div className="flex">
-            <select value={personId} onChange={(e) => setPersonId(e.target.value)} style={{ flex: 1 }} required={incoming}>
-              <option value="">{incoming ? "Choose a person…" : "No person"}</option>
-              {people.map((p) => (
-                <option key={p.id} value={p.id}>
-                  {p.name}
-                </option>
-              ))}
-            </select>
-            <button type="button" className="btn sm" onClick={addPerson}>
-              +
-            </button>
-          </div>
-        </Field>
+        {incoming ? (
+          <Field label="Who owes me" hint="A person or one of your companies.">
+            <div className="flex">
+              <select value={debtor} onChange={(e) => setDebtor(e.target.value)} style={{ flex: 1 }} required>
+                <option value="">Choose…</option>
+                <optgroup label="Companies">
+                  {companies.map((c) => (
+                    <option key={`c:${c.id}`} value={`c:${c.id}`}>
+                      🏢 {c.name}
+                    </option>
+                  ))}
+                </optgroup>
+                <optgroup label="People">
+                  {people.map((p) => (
+                    <option key={`p:${p.id}`} value={`p:${p.id}`}>
+                      👤 {p.name}
+                    </option>
+                  ))}
+                </optgroup>
+              </select>
+              <button type="button" className="btn sm" onClick={addCompany} title="New company">
+                + 🏢
+              </button>
+              <button type="button" className="btn sm" onClick={addPerson} title="New person">
+                + 👤
+              </button>
+            </div>
+          </Field>
+        ) : (
+          <Field label="Person (optional)" hint="Leave empty for bills that are not tied to a person, like rent or a subscription.">
+            <div className="flex">
+              <select value={personId} onChange={(e) => setPersonId(e.target.value)} style={{ flex: 1 }}>
+                <option value="">No person</option>
+                {people.map((p) => (
+                  <option key={p.id} value={p.id}>
+                    {p.name}
+                  </option>
+                ))}
+              </select>
+              <button type="button" className="btn sm" onClick={addPerson}>
+                +
+              </button>
+            </div>
+          </Field>
+        )}
         <div className="grid2">
           <Field label="Amount" className="amount">
             <input type="number" inputMode="decimal" step="0.01" min="0" value={amount} onChange={(e) => setAmount(e.target.value)} required placeholder="0" />
@@ -177,7 +223,7 @@ export function PayBillForm({ bill, onClose }: { bill: Bill; onClose: () => void
   const [date, setDate] = useState(todayStr());
   const [note, setNote] = useState("");
   const [busy, setBusy] = useState(false);
-  const person = state.people.find((p) => p.id === bill.person_id);
+  const person = state.people.find((p) => p.id === bill.person_id) ?? state.projects.find((p) => p.id === bill.project_id);
   const partial = paidInBill > 0 && paidInBill < remaining - 0.004;
 
   function chooseAccount(id: string) {
