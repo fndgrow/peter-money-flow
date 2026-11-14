@@ -48,8 +48,31 @@ export function Dashboard() {
   const inMain = (t: Transaction) => c.conv(t.amount, accCur.get(t.account_id) ?? c.main, c.main);
   const firstDate = state.transactions.length ? state.transactions[state.transactions.length - 1].date : today;
   const range = periodRange(period, today, firstDate);
-  const prevLen = daysBetween(range.from, range.to) + 1;
-  const prevRange = { from: addDays(range.from, -prevLen), to: addDays(range.from, -1) };
+  // What "previous" means: the matching calendar period (last month, the 3 months before, last year),
+  // not just the same number of days, so "this month" is always compared with the whole of last month.
+  const { prevRange, prevLabel } = (() => {
+    const startMonth = monthKey(range.from);
+    const full = (fromMonth: string, toMonth: string) => ({ from: `${fromMonth}-01`, to: monthEnd(toMonth) });
+    switch (period) {
+      case "month":
+      case "last": {
+        const pm = shiftMonth(startMonth, -1);
+        return { prevRange: full(pm, pm), prevLabel: `vs ${monthLabel(pm, locale)}` };
+      }
+      case "3m":
+        return { prevRange: full(shiftMonth(startMonth, -3), shiftMonth(startMonth, -1)), prevLabel: "vs the 3 months before" };
+      case "6m":
+        return { prevRange: full(shiftMonth(startMonth, -6), shiftMonth(startMonth, -1)), prevLabel: "vs the 6 months before" };
+      case "year": {
+        const y = Number(range.from.slice(0, 4)) - 1;
+        return { prevRange: { from: `${y}-01-01`, to: `${y}-12-31` }, prevLabel: `vs ${y}` };
+      }
+      default: {
+        const len = daysBetween(range.from, range.to) + 1;
+        return { prevRange: { from: addDays(range.from, -len), to: addDays(range.from, -1) }, prevLabel: `vs previous ${len} days` };
+      }
+    }
+  })();
 
   const inRange = (t: Transaction, r: { from: string; to: string }) => t.date >= r.from && t.date <= r.to;
   const sum = (r: { from: string; to: string }, type: "income" | "expense") =>
@@ -577,7 +600,7 @@ export function Dashboard() {
       <div className="card">
         <div className="card-title">
           <h2>Top categories</h2>
-          <span className="muted tiny">vs previous {days} days</span>
+          <span className="muted tiny">{prevLabel}</span>
         </div>
         <div className="rank">
           {byCat.slice(0, 8).map((r) => {
