@@ -2,7 +2,12 @@ import { useId, useState, type ReactNode } from "react";
 
 /* Small, dependency-free SVG charts. Colours come from CSS variables so light/dark follow the app. */
 
-export const SERIES = ["var(--s1)", "var(--s2)", "var(--s3)", "var(--s4)", "var(--s5)", "var(--s6)", "var(--s7)", "var(--s8)"];
+// Enough distinct colours for every category to keep its own; the first eight follow the theme, the rest are fixed.
+export const SERIES = [
+  "var(--s1)", "var(--s2)", "var(--s3)", "var(--s4)", "var(--s5)", "var(--s6)", "var(--s7)", "var(--s8)",
+  "#0ea5e9", "#a855f7", "#14b8a6", "#84cc16", "#f43f5e", "#a16207", "#06b6d4", "#d946ef", "#818cf8", "#65a30d", "#fb923c", "#64748b",
+  "#22d3ee", "#c084fc", "#4ade80", "#facc15", "#f472b6", "#94a3b8",
+];
 export const OTHER_COLOR = "var(--muted)";
 
 export interface Tip {

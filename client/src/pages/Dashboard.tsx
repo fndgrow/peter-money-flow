@@ -64,7 +64,7 @@ export function Dashboard() {
   const perDay = expense / days;
   const rate = income > 0 ? Math.round((kept / income) * 100) : null;
 
-  // Stable colour per top-level expense category: ranked by all-time spending, first 7 get a slot, rest fold into Other.
+  // Stable colour per top-level expense category, assigned by all-time spending rank so a category keeps its colour everywhere.
   const topLevel = (cat: Category | undefined) => (cat?.parent_id ? state.categories.find((p) => p.id === cat.parent_id) : cat);
   const colorMap = useMemo(() => {
     const allTime = new Map<number, number>();
@@ -76,7 +76,7 @@ export function Dashboard() {
     }
     const ranked = [...allTime.entries()].sort((a, b) => b[1] - a[1]).map(([id]) => id);
     const m = new Map<number, string>();
-    ranked.slice(0, 7).forEach((id, i) => m.set(id, SERIES[i]));
+    ranked.forEach((id, i) => m.set(id, SERIES[i % SERIES.length]));
     return m;
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [state]);
@@ -106,7 +106,7 @@ export function Dashboard() {
     const named = byCat.filter((r) => r.color !== OTHER_COLOR);
     const other = byCat.filter((r) => r.color === OTHER_COLOR).reduce((s, r) => s + r.amount, 0);
     const out: Slice[] = named.map((r) => ({ key: String(r.id), label: `${r.icon} ${r.name}`, value: r.amount, color: r.color }));
-    if (other > 0) out.push({ key: "other", label: "Other", value: other, color: OTHER_COLOR });
+    if (other > 0) out.push({ key: "other", label: "No category", value: other, color: OTHER_COLOR });
     return out;
   }, [byCat]);
 
@@ -205,7 +205,7 @@ export function Dashboard() {
     const allTime = new Map<number | null, number>();
     for (const t of state.transactions) if (t.type === "income") allTime.set(t.category_id, (allTime.get(t.category_id) ?? 0) + inMain(t));
     const m = new Map<number | null, string>();
-    [...allTime.entries()].sort((a, b) => b[1] - a[1]).slice(0, 7).forEach(([id], i) => m.set(id, SERIES[i]));
+    [...allTime.entries()].sort((a, b) => b[1] - a[1]).forEach(([id], i) => { if (id !== null) m.set(id, SERIES[i % SERIES.length]); });
     return m;
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [state]);
@@ -213,7 +213,7 @@ export function Dashboard() {
     const named = incomeByCat.filter((r) => incomeColor.has(r.id));
     const other = incomeByCat.filter((r) => !incomeColor.has(r.id)).reduce((s, r) => s + r.amount, 0);
     const out: Slice[] = named.map((r) => ({ key: String(r.id), label: `${r.icon} ${r.name}`, value: r.amount, color: incomeColor.get(r.id)! }));
-    if (other > 0) out.push({ key: "other", label: "Other", value: other, color: OTHER_COLOR });
+    if (other > 0) out.push({ key: "other", label: "No category", value: other, color: OTHER_COLOR });
     return out;
   }, [incomeByCat, incomeColor]);
 
