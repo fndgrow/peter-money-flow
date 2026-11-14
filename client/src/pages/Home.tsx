@@ -152,8 +152,6 @@ export function Home() {
           )}
         </div>
 
-        <BudgetCard />
-
         {owedToMe.length > 0 && (
           <div className="card">
             <div className="card-title">
@@ -189,6 +187,8 @@ export function Home() {
             )}
           </div>
         )}
+
+        <BudgetCard />
 
         <div className="card">
           <div className="card-title">
