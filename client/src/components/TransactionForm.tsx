@@ -3,6 +3,7 @@ import { api } from "../lib/api";
 import { useData } from "../lib/store";
 import { todayStr } from "../lib/money";
 import { CategoryPicker } from "./CategoryPicker";
+import { QuickNameForm } from "./QuickNameForm";
 import type { Transaction, TxType } from "../lib/types";
 import { ConfirmDelete, Field, Segmented, Sheet } from "./ui";
 
@@ -55,27 +56,24 @@ export function TransactionForm({ initialType = "expense", existing, onClose }: 
   const otherCurrency = secondary ? (currency === mainCurrency ? secondary.currency : mainCurrency) : null;
   const fmt2 = otherCurrency ? (n: number) => fmtIn(otherCurrency)(conv(n, currency, otherCurrency)) : null;
 
-  async function addPerson() {
-    const name = window.prompt("Person's name");
-    if (!name?.trim()) return;
-    try {
-      const r = await api.post<{ id: number }>("/api/people", { name: name.trim() });
+  // New person / company / category are added in a small sheet (browser prompts are unreliable in installed apps).
+  const [naming, setNaming] = useState<"person" | "company" | "category" | null>(null);
+  const addPerson = () => setNaming("person");
+  const addCompany = () => setNaming("company");
+  const addCategory = () => setNaming("category");
+  async function createNamed(name: string) {
+    if (naming === "person") {
+      const r = await api.post<{ id: number }>("/api/people", { name });
       await refresh();
       setPersonId(String(r.id));
-    } catch (e) {
-      setError((e as Error).message);
-    }
-  }
-
-  async function addCategory() {
-    const name = window.prompt(`New ${type} category name`);
-    if (!name?.trim()) return;
-    try {
-      const r = await api.post<{ id: number }>("/api/categories", { name: name.trim(), kind: type });
+    } else if (naming === "company") {
+      const r = await api.post<{ id: number }>("/api/projects", { name });
+      await refresh();
+      setProjectId(String(r.id));
+    } else {
+      const r = await api.post<{ id: number }>("/api/categories", { name, kind: type });
       await refresh();
       setCategoryId(String(r.id));
-    } catch (e) {
-      setError((e as Error).message);
     }
   }
 
@@ -252,15 +250,20 @@ export function TransactionForm({ initialType = "expense", existing, onClose }: 
                   </button>
                 </div>
               </Field>
-              <Field label="Project (optional)">
-                <select value={projectId} onChange={(e) => setProjectId(e.target.value)}>
-                  <option value="">None</option>
-                  {projects.map((p) => (
-                    <option key={p.id} value={p.id}>
-                      {p.name}
-                    </option>
-                  ))}
-                </select>
+              <Field label={type === "income" ? "From company / project" : "Company / project (optional)"}>
+                <div className="flex">
+                  <select value={projectId} onChange={(e) => setProjectId(e.target.value)} style={{ flex: 1 }}>
+                    <option value="">None</option>
+                    {projects.map((p) => (
+                      <option key={p.id} value={p.id}>
+                        🏢 {p.name}
+                      </option>
+                    ))}
+                  </select>
+                  <button type="button" className="btn sm" onClick={addCompany} title="New company">
+                    +
+                  </button>
+                </div>
               </Field>
             </div>
           </>
@@ -277,6 +280,15 @@ export function TransactionForm({ initialType = "expense", existing, onClose }: 
           </button>
         </div>
       </form>
+      {naming && (
+        <QuickNameForm
+          title={naming === "company" ? "New company" : naming === "person" ? "New person" : `New ${type} category`}
+          label={naming === "company" ? "Company name" : naming === "person" ? "Person's name" : "Category name"}
+          placeholder={naming === "company" ? "e.g. Kordeko" : naming === "person" ? "e.g. Andrei" : "e.g. Pets"}
+          onSave={createNamed}
+          onClose={() => setNaming(null)}
+        />
+      )}
     </Sheet>
   );
 }

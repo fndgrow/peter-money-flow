@@ -21,7 +21,7 @@ export function TxRow({ t, onClick }: { t: Transaction; onClick: () => void }) {
     if (t.note && cat) parts.push(catName);
     if (person) parts.push(person.name);
     if (acc) parts.push(acc.name);
-    if (project) parts.push(`📁 ${project.name}`);
+    if (project) parts.push(`🏢 ${project.name}`);
   } else if (t.note) parts.push(t.note);
   return (
     <button className="row-item" onClick={onClick}>

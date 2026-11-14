@@ -3,6 +3,7 @@ import { api } from "../lib/api";
 import { useData } from "../lib/store";
 import { billPaidMap, billRemaining, todayStr } from "../lib/money";
 import { CategoryPicker } from "./CategoryPicker";
+import { QuickNameForm } from "./QuickNameForm";
 import type { Bill, Recurrence } from "../lib/types";
 import { ConfirmDelete, Field, Sheet } from "./ui";
 
@@ -41,29 +42,21 @@ export function BillForm({
 
   const people = state.people.filter((p) => !p.archived || p.id === existing?.person_id);
 
-  async function addPerson() {
-    const name = window.prompt("Person's name");
-    if (!name?.trim()) return;
-    try {
-      const r = await api.post<{ id: number }>("/api/people", { name: name.trim() });
+  // Adding a person or company happens in a small sheet (browser prompts are unreliable in installed apps).
+  const [naming, setNaming] = useState<"person" | "company" | null>(null);
+  const addPerson = () => setNaming("person");
+  const addCompany = () => setNaming("company");
+  async function createNamed(name: string) {
+    if (naming === "company") {
+      const r = await api.post<{ id: number }>("/api/projects", { name });
+      await refresh();
+      setDebtor(`c:${r.id}`);
+    } else {
+      const r = await api.post<{ id: number }>("/api/people", { name });
       await refresh();
       setPersonId(String(r.id));
       setDebtor(`p:${r.id}`);
-      if (!title) setTitle(name.trim());
-    } catch (e) {
-      setError((e as Error).message);
-    }
-  }
-
-  async function addCompany() {
-    const name = window.prompt("Company name");
-    if (!name?.trim()) return;
-    try {
-      const r = await api.post<{ id: number }>("/api/projects", { name: name.trim() });
-      await refresh();
-      setDebtor(`c:${r.id}`);
-    } catch (e) {
-      setError((e as Error).message);
+      if (!title && !incoming) setTitle(name);
     }
   }
 
@@ -194,6 +187,15 @@ export function BillForm({
           </button>
         </div>
       </form>
+      {naming && (
+        <QuickNameForm
+          title={naming === "company" ? "New company" : "New person"}
+          label={naming === "company" ? "Company name" : "Person's name"}
+          placeholder={naming === "company" ? "e.g. Kordeko" : "e.g. Andrei"}
+          onSave={createNamed}
+          onClose={() => setNaming(null)}
+        />
+      )}
     </Sheet>
   );
 }

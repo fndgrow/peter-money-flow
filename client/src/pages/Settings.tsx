@@ -335,13 +335,13 @@ export function Settings() {
 
         <div className="card">
           <div className="card-title">
-            <h2>Projects (side work)</h2>
+            <h2>Companies & projects</h2>
             <button className="btn sm" onClick={() => setEditProject("new")}>
               + Add
             </button>
           </div>
           {state.projects.length === 0 ? (
-            <p className="small muted">Create a project, then tag its income and costs when adding transactions. Reports show the profit per project.</p>
+            <p className="small muted">The companies that pay you and your one-off projects. Pick one when you add an income, or when someone owes you, and the Dashboard shows how much came from each.</p>
           ) : (
             <div className="chips">
               {state.projects.map((p) => (
