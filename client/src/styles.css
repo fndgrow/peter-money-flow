@@ -80,8 +80,8 @@ input, select, textarea { font: inherit; color: inherit; }
 .nav {
   position: fixed; left: 0; right: 0; bottom: 0;
   height: calc(var(--nav-h) + var(--safe-b)); padding-bottom: var(--safe-b);
-  background: color-mix(in srgb, var(--card) 88%, transparent);
-  backdrop-filter: blur(14px); -webkit-backdrop-filter: blur(14px);
+  background: var(--card);
+  /* solid instead of blurred: a blurred fixed bar costs a repaint on every scroll frame on phones */
   border-top: 1px solid var(--line);
   display: flex; justify-content: space-around; z-index: 20;
 }
@@ -91,12 +91,12 @@ input, select, textarea { font: inherit; color: inherit; }
 }
 .nav a svg { width: 24px; height: 24px; }
 .nav a.active { color: var(--accent); }
-.nav a.active svg { filter: drop-shadow(0 4px 10px color-mix(in srgb, var(--accent) 50%, transparent)); }
+.nav a.active svg { opacity: 1; }
 @media (min-width: 900px) {
   .app { flex-direction: row; }
   .nav {
     position: sticky; top: 0; bottom: auto; height: 100dvh; width: 232px; flex-direction: column; justify-content: flex-start;
-    border-top: 0; border-right: 1px solid var(--line); padding: 22px 14px; gap: 4px; backdrop-filter: none; background: var(--card);
+    border-top: 0; border-right: 1px solid var(--line); padding: 22px 14px; gap: 4px; background: var(--card);
   }
   .nav a { flex: 0 0 auto; flex-direction: row; justify-content: flex-start; gap: 12px; padding: 11px 14px; border-radius: 12px; font-size: 0.95rem; }
   .nav a.active { background: var(--accent-soft); }
@@ -391,3 +391,7 @@ table.tbl tr.cur td { font-weight: 800; }
 .plan-row.done { background: color-mix(in srgb, var(--income-soft) 55%, transparent); border-radius: 10px; padding-left: 6px; padding-right: 6px; }
 .plan-row.over { background: color-mix(in srgb, var(--expense-soft) 45%, transparent); border-radius: 10px; padding-left: 6px; padding-right: 6px; }
 .plan-row .pn .ps { display: block; font-size: 0.72rem; color: var(--muted); font-weight: 500; }
+
+/* ---------- rendering performance ---------- */
+/* Rows far below the fold are skipped by layout and paint until scrolled near. */
+.list > .row-item, .list > .cat-group, .plan-row { content-visibility: auto; contain-intrinsic-size: auto 64px; }

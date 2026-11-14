@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 import { useData } from "../lib/store";
 import { catLabel, categoryGroups, formatDate, monthKey, monthLabel, shiftMonth, txInMain } from "../lib/money";
@@ -106,6 +106,23 @@ export function Transactions() {
     }
     return [...m.entries()];
   }, [list]);
+
+  // Long lists (all time, broad filters) are rendered in pages so the phone does not lay out 1,000 rows at once.
+  const PAGE = 80;
+  const [limit, setLimit] = useState(PAGE);
+  useEffect(() => setLimit(PAGE), [list]);
+  const shown = useMemo(() => {
+    let n = 0;
+    const out: [string, Transaction[]][] = [];
+    for (const [date, items] of groups) {
+      if (n >= limit) break;
+      const take = items.slice(0, limit - n);
+      out.push([date, take]);
+      n += take.length;
+    }
+    return out;
+  }, [groups, limit]);
+  const hidden = list.length - Math.min(list.length, limit);
 
   function clearFilters() {
     setAccountId("");
@@ -241,18 +258,25 @@ export function Transactions() {
             <Empty>No transactions match.</Empty>
           </div>
         ) : (
-          groups.map(([date, items]) => (
-            <div className="card" key={date}>
-              <div className="tiny muted bold mb" style={{ textTransform: "uppercase" }}>
-                {formatDate(date, locale, { weekday: "short", day: "numeric", month: "long" })}
+          <>
+            {shown.map(([date, items]) => (
+              <div className="card" key={date}>
+                <div className="tiny muted bold mb" style={{ textTransform: "uppercase" }}>
+                  {formatDate(date, locale, { weekday: "short", day: "numeric", month: "long" })}
+                </div>
+                <div className="list">
+                  {items.map((t) => (
+                    <TxRow key={t.id} t={t} onClick={() => setEditing(t)} />
+                  ))}
+                </div>
               </div>
-              <div className="list">
-                {items.map((t) => (
-                  <TxRow key={t.id} t={t} onClick={() => setEditing(t)} />
-                ))}
-              </div>
-            </div>
-          ))
+            ))}
+            {hidden > 0 && (
+              <button className="btn block mb" onClick={() => setLimit((l) => l + PAGE * 2)}>
+                Show more ({hidden} more)
+              </button>
+            )}
+          </>
         )}
       </div>
       {adding && <TransactionForm onClose={() => setAdding(false)} />}

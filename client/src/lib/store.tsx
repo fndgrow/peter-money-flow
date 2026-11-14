@@ -77,7 +77,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       setState(s);
       setOffline(false);
     } catch (e) {
-      if (e instanceof ApiError && e.status === 401) setAuth({ setup: true, authed: false });
+      if (e instanceof ApiError && e.status === 401) setAuth((prev) => ({ setup: prev?.setup ?? true, authed: false }));
       else if (e instanceof ApiError && e.status === 0) setOffline(true);
       else toast((e as Error).message, "error");
     } finally {
@@ -85,14 +85,19 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     }
   }, [toast]);
 
+  // First load: ask "who am I" and fetch the data at the same time instead of one after the other.
+  // The data call simply answers 401 when not signed in, which the refresh handler already treats as "not authed".
   useEffect(() => {
     refreshAuth();
-  }, [refreshAuth]);
+    refresh();
+  }, [refreshAuth, refresh]);
 
+  // After signing in (or when the first parallel fetch could not run), load the data once.
   useEffect(() => {
-    if (auth?.authed) refresh();
-    else if (auth) setLoading(false);
-  }, [auth, refresh]);
+    if (auth?.authed && !state && !loading) refresh();
+    else if (auth && !auth.authed) setLoading(false);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [auth]);
 
   useEffect(() => {
     const on = () => {

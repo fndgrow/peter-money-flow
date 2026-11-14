@@ -283,6 +283,7 @@ api.use(requireAuth);
 // ---------- state ----------
 
 api.get("/state", (_req, res) => {
+  res.setHeader("Cache-Control", "private, no-cache");
   res.json({
     settings: allSettings(),
     accounts: db.prepare("SELECT * FROM accounts ORDER BY sort, id").all(),

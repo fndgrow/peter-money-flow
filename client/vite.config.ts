@@ -32,7 +32,7 @@ export default defineConfig({
             // Keep the last known data so the app opens offline (read-only).
             urlPattern: /^\/api\/state$/,
             handler: "NetworkFirst",
-            options: { cacheName: "api-state", networkTimeoutSeconds: 6 },
+            options: { cacheName: "api-state", networkTimeoutSeconds: 3 },
           },
         ],
       },
