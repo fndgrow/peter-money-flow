@@ -3,7 +3,7 @@ import cookieParser from "cookie-parser";
 import path from "node:path";
 import fs from "node:fs";
 import { fileURLToPath } from "node:url";
-import { seedDefaults, fillCurrencies, migrateIncomeCategories, migrateExpenseCategories, removeSalaryFeature, DB_PATH } from "./db.js";
+import { seedDefaults, fillCurrencies, migrateIncomeCategories, migrateExpenseCategories, removeSalaryFeature, ensureReceivableCategory, DB_PATH } from "./db.js";
 import { api } from "./routes.js";
 import { startRateUpdater } from "./rates.js";
 import { startSweepScheduler } from "./sweep.js";
@@ -18,6 +18,7 @@ fillCurrencies();
 migrateIncomeCategories();
 migrateExpenseCategories();
 removeSalaryFeature();
+ensureReceivableCategory();
 startRateUpdater();
 startSweepScheduler();
 
