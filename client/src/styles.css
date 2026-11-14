@@ -390,3 +390,4 @@ table.tbl tr.cur td { font-weight: 800; }
 .plan-total { display: flex; justify-content: space-between; align-items: baseline; gap: 10px; padding: 10px 0 2px; font-size: 0.86rem; }
 .plan-row.done { background: color-mix(in srgb, var(--income-soft) 55%, transparent); border-radius: 10px; padding-left: 6px; padding-right: 6px; }
 .plan-row.over { background: color-mix(in srgb, var(--expense-soft) 45%, transparent); border-radius: 10px; padding-left: 6px; padding-right: 6px; }
+.plan-row .pn .ps { display: block; font-size: 0.72rem; color: var(--muted); font-weight: 500; }

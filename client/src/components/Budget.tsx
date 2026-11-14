@@ -46,6 +46,12 @@ export function BudgetCard() {
   const [edit, setEdit] = useState<BudgetItem | "new" | null>(null);
   const f = fmtIn(plan.cur);
   const icon = (catId: number | null) => state.categories.find((c) => c.id === catId)?.icon ?? "📋";
+  // For a sub-category, the group it belongs to (so two "Phone" lines read Personal vs Company subscriptions).
+  const group = (catId: number | null) => {
+    const c = state.categories.find((x) => x.id === catId);
+    const p = c?.parent_id ? state.categories.find((x) => x.id === c.parent_id) : undefined;
+    return p ? `${p.icon ? `${p.icon} ` : ""}${p.name}` : null;
+  };
 
   return (
     <>
@@ -76,7 +82,10 @@ export function BudgetCard() {
                     className={`plan-row ${done ? "done" : ""}`}
                   >
                     <span className="pi">{done ? "✅" : icon(item.category_id)}</span>
-                    <span className={`pn ${done ? "income" : ""}`}>{item.name}</span>
+                    <span className={`pn ${done ? "income" : ""}`}>
+                      {item.name}
+                      {group(item.category_id) && <span className="ps">{group(item.category_id)}</span>}
+                    </span>
                     <span className={`pa ${done ? "income" : ""}`}>
                       {fi(spent)} <span className="muted">/ {fi(item.amount)}</span>
                       <span className={`sub ${done ? "income" : ""}`}>{done ? (over ? `paid ✓ · ${fi(spent - item.amount)} more` : "paid ✓") : `${fi(left)} left`}</span>
