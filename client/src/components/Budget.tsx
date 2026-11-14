@@ -67,18 +67,19 @@ export function BudgetCard() {
               {plan.rows.map(({ item, cur, spent, left, over }) => {
                 const fi = fmtIn(cur);
                 const pct = Math.min(100, (spent / item.amount) * 100);
-                const done = !over && item.amount - spent < 0.005;
+                // Reaching the planned amount means the line is paid; spending a bit more is fine and stays green.
+                const done = over || item.amount - spent < 0.005;
                 return (
                   <Link
                     key={item.id}
                     to={item.category_id ? `/transactions?category=${item.category_id}` : "/transactions"}
-                    className={`plan-row ${over ? "over" : done ? "done" : ""}`}
+                    className={`plan-row ${done ? "done" : ""}`}
                   >
                     <span className="pi">{done ? "✅" : icon(item.category_id)}</span>
-                    <span className={`pn ${done ? "income" : over ? "expense" : ""}`}>{item.name}</span>
-                    <span className={`pa ${done ? "income" : over ? "expense" : ""}`}>
+                    <span className={`pn ${done ? "income" : ""}`}>{item.name}</span>
+                    <span className={`pa ${done ? "income" : ""}`}>
                       {fi(spent)} <span className="muted">/ {fi(item.amount)}</span>
-                      <span className={`sub ${over ? "expense" : done ? "income" : ""}`}>{over ? `${fi(spent - item.amount)} over` : done ? "paid ✓" : `${fi(left)} left`}</span>
+                      <span className={`sub ${done ? "income" : ""}`}>{done ? (over ? `paid ✓ · ${fi(spent - item.amount)} more` : "paid ✓") : `${fi(left)} left`}</span>
                     </span>
                     <div className="bar">
                       <div style={{ width: `${pct}%` }} />
