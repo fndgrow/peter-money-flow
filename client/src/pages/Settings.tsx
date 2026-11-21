@@ -11,6 +11,7 @@ const CURRENCIES = ["EUR", "USD", "GBP", "CHF", "PLN", "CZK", "RON", "MDL", "UAH
 export function Settings() {
   const { state, run, logout, refresh, toast, currency: mainCurrency, auth, refreshAuth } = useData();
   const [emailForm, setEmailForm] = useState(false);
+  const [twoFa, setTwoFa] = useState(false);
   const s = state.settings;
   const [ownerName, setOwnerName] = useState(s.owner_name ?? "");
   const [currency, setCurrency] = useState(s.currency ?? "EUR");
@@ -387,8 +388,19 @@ export function Settings() {
           </div>
           <p className="small muted mb">
             Login email: <b>{auth?.email || "not set"}</b>
+            <br />
+            Two-factor codes: {auth?.twoFactor ? <span className="pill good">On</span> : <span className="pill warn">Off</span>}
+            {auth?.turnstileSiteKey ? (
+              <>
+                {" "}
+                · Human check at sign-in: <span className="pill good">On</span>
+              </>
+            ) : null}
           </p>
           <div className="flex wrap">
+            <button className="btn primary" onClick={() => setTwoFa(true)}>
+              {auth?.twoFactor ? "Turn off two-factor" : "Set up two-factor"}
+            </button>
             <button className="btn" onClick={() => setPwd(true)}>
               Change password
             </button>
@@ -405,6 +417,15 @@ export function Settings() {
       {editCat && <CategoryForm existing={editCat.existing} kind={editCat.kind} presetParentId={editCat.parentId} onClose={() => setEditCat(null)} />}
       {editProject && <ProjectForm existing={editProject === "new" ? undefined : editProject} onClose={() => setEditProject(null)} />}
       {pwd && <PasswordForm onClose={() => setPwd(false)} />}
+      {twoFa && (
+        <TwoFactorForm
+          enabled={!!auth?.twoFactor}
+          onClose={() => {
+            setTwoFa(false);
+            refreshAuth();
+          }}
+        />
+      )}
       {emailForm && (
         <EmailForm
           current={auth?.email || ""}
@@ -415,6 +436,120 @@ export function Settings() {
         />
       )}
     </>
+  );
+}
+
+function TwoFactorForm({ enabled, onClose }: { enabled: boolean; onClose: () => void }) {
+  const { toast } = useData();
+  const [password, setPassword] = useState("");
+  const [code, setCode] = useState("");
+  const [setup, setSetup] = useState<{ secret: string; qr: string } | null>(null);
+  const [error, setError] = useState("");
+  const [busy, setBusy] = useState(false);
+
+  async function start(e: FormEvent) {
+    e.preventDefault();
+    setError("");
+    setBusy(true);
+    try {
+      setSetup(await api.post<{ secret: string; qr: string }>("/api/2fa/setup", { current: password }));
+    } catch (err) {
+      setError((err as Error).message);
+    } finally {
+      setBusy(false);
+    }
+  }
+  async function enable(e: FormEvent) {
+    e.preventDefault();
+    setError("");
+    setBusy(true);
+    try {
+      await api.post("/api/2fa/enable", { code });
+      toast("Two-factor is on. You will need the code at every sign-in.");
+      onClose();
+    } catch (err) {
+      setError((err as Error).message);
+    } finally {
+      setBusy(false);
+    }
+  }
+  async function disable(e: FormEvent) {
+    e.preventDefault();
+    setError("");
+    setBusy(true);
+    try {
+      await api.post("/api/2fa/disable", { current: password, code });
+      toast("Two-factor is off");
+      onClose();
+    } catch (err) {
+      setError((err as Error).message);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  if (enabled) {
+    return (
+      <Sheet title="Turn off two-factor" onClose={onClose}>
+        <form onSubmit={disable}>
+          {error && <div className="form-error">{error}</div>}
+          <p className="small muted mb">Without two-factor, the password alone opens your data. Confirm with your password and a current code.</p>
+          <Field label="Password">
+            <input type="password" value={password} onChange={(e) => setPassword(e.target.value)} required autoComplete="current-password" />
+          </Field>
+          <Field label="Authenticator code">
+            <input type="text" inputMode="numeric" maxLength={6} value={code} onChange={(e) => setCode(e.target.value.replace(/\D/g, ""))} required />
+          </Field>
+          <div className="form-actions">
+            <button className="btn danger" type="submit" disabled={busy}>
+              Turn off
+            </button>
+          </div>
+        </form>
+      </Sheet>
+    );
+  }
+
+  return (
+    <Sheet title="Set up two-factor" onClose={onClose}>
+      {error && <div className="form-error">{error}</div>}
+      {!setup ? (
+        <form onSubmit={start}>
+          <p className="small muted mb">
+            You will need an authenticator app on your phone: Google Authenticator, Microsoft Authenticator, Authy or 1Password all work. After this,
+            signing in needs your password <b>and</b> the 6-digit code from the app, so nobody else can get in even if they know the password.
+          </p>
+          <Field label="Confirm your password">
+            <input type="password" value={password} onChange={(e) => setPassword(e.target.value)} required autoFocus autoComplete="current-password" />
+          </Field>
+          <div className="form-actions">
+            <button className="btn primary" type="submit" disabled={busy}>
+              Continue
+            </button>
+          </div>
+        </form>
+      ) : (
+        <form onSubmit={enable}>
+          <p className="small muted mb">1. Open the authenticator app and scan this code (or type the key below).</p>
+          <div className="center mb">
+            <img src={setup.qr} alt="QR code for the authenticator app" width={220} height={220} style={{ borderRadius: 12, background: "#fff", padding: 6 }} />
+            <div className="tiny muted mt" style={{ wordBreak: "break-all", userSelect: "all" }}>
+              {setup.secret.match(/.{1,4}/g)?.join(" ")}
+            </div>
+          </div>
+          <p className="small muted mb">2. Enter the 6-digit code the app shows now.</p>
+          <Field label="Code from the app" className="amount">
+            <input type="text" inputMode="numeric" maxLength={6} value={code} onChange={(e) => setCode(e.target.value.replace(/\D/g, ""))} required autoFocus placeholder="000000" />
+          </Field>
+          <div className="banner">Keep the app on your phone. If you lose it, the server administrator has to reset two-factor for you.</div>
+          <div className="form-actions">
+            <button className="btn primary" type="submit" disabled={busy || code.length !== 6}>
+              Turn on two-factor
+            </button>
+          </div>
+        </form>
+      )}
+    </Sheet>
   );
 }
 
@@ -483,10 +618,10 @@ function PasswordForm({ onClose }: { onClose: () => void }) {
           <input type="password" value={current} onChange={(e) => setCurrent(e.target.value)} required autoComplete="current-password" />
         </Field>
         <Field label="New password">
-          <input type="password" value={next} onChange={(e) => setNext(e.target.value)} required minLength={6} autoComplete="new-password" />
+          <input type="password" value={next} onChange={(e) => setNext(e.target.value)} required minLength={4} autoComplete="new-password" />
         </Field>
         <Field label="Repeat new password">
-          <input type="password" value={confirm} onChange={(e) => setConfirm(e.target.value)} required minLength={6} autoComplete="new-password" />
+          <input type="password" value={confirm} onChange={(e) => setConfirm(e.target.value)} required minLength={4} autoComplete="new-password" />
         </Field>
         <div className="form-actions">
           <button className="btn primary" type="submit">

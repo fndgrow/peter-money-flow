@@ -112,6 +112,8 @@ addColumn("categories", "parent_id", "INTEGER REFERENCES categories(id) ON DELET
 addColumn("user", "email", "TEXT"); // login email (required at sign-in once set)
 addColumn("bills", "direction", "TEXT NOT NULL DEFAULT 'out'"); // 'out': I pay someone; 'in': someone pays me
 addColumn("bills", "project_id", "INTEGER REFERENCES projects(id) ON DELETE SET NULL"); // company that owes me (or that a payment relates to)
+addColumn("user", "totp_secret", "TEXT"); // base32 secret once two-factor is enabled
+addColumn("user", "totp_pending", "TEXT"); // secret being set up, not yet confirmed
 
 /** Older rows have no currency: assume the main currency. Safe to run on every start. */
 export function fillCurrencies() {

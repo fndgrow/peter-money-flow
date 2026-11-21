@@ -18,7 +18,22 @@ import {
   setUserEmail,
   normalizeEmail,
   emailMatches,
+  totpSecret,
+  totpPending,
+  setTotpPending,
+  enableTotp,
+  disableTotp,
+  issuePendingLogin,
+  redeemPendingLogin,
+  finishPendingLogin,
+  TURNSTILE_SITE_KEY,
+  turnstileEnabled,
+  verifyTurnstile,
 } from "./auth.js";
+import { generateSecret, otpauthUrl, verifyTotp } from "./totp.js";
+import QRCode from "qrcode";
+
+const MIN_PASSWORD = 4;
 
 import { fetchRate, refreshStoredRate } from "./rates.js";
 import { previewSweep, runSweep, sweepNote } from "./sweep.js";
@@ -212,17 +227,24 @@ function syncBillStatus(billId: number) {
 
 api.get("/me", (req, res) => {
   const authed = isAuthed(req);
-  res.json({ setup: hasUser(), authed, email: authed ? userEmail() : undefined });
+  res.json({
+    setup: hasUser(),
+    authed,
+    email: authed ? userEmail() : undefined,
+    twoFactor: authed ? !!totpSecret() : undefined,
+    turnstileSiteKey: turnstileEnabled ? TURNSTILE_SITE_KEY : "",
+  });
 });
 
 api.post(
   "/setup",
-  wrap((req, res) => {
+  wrap(async (req, res) => {
     if (hasUser()) throw new HttpError(400, "Already set up");
+    if (!(await verifyTurnstile(req.body?.turnstile, req.ip))) throw new HttpError(400, "Please tick the “I am human” box");
     const email = normalizeEmail(req.body?.email);
     if (!EMAIL_RE.test(email)) throw new HttpError(400, "Enter a valid email address");
     const password = str(req.body?.password, "Password", { required: true }) as string;
-    if (password.length < 6) throw new HttpError(400, "Password must be at least 6 characters");
+    if (password.length < MIN_PASSWORD) throw new HttpError(400, `Password must be at least ${MIN_PASSWORD} characters`);
     createUser(password, email);
     issueSession(res);
     res.json({ ok: true });
@@ -232,13 +254,37 @@ api.post(
 api.post(
   "/login",
   loginLimiter,
-  wrap((req, res) => {
+  wrap(async (req, res) => {
+    if (!(await verifyTurnstile(req.body?.turnstile, req.ip))) throw new HttpError(400, "Please tick the “I am human” box");
     const email = normalizeEmail(req.body?.email);
     const password = String(req.body?.password ?? "");
     if (!emailMatches(email) || !verifyPassword(password)) {
       noteFailedLogin(req);
       throw new HttpError(401, "Wrong email or password");
     }
+    if (totpSecret()) {
+      // Password is right; now ask for the authenticator code.
+      return res.json({ ok: false, twoFactor: true, ticket: issuePendingLogin() });
+    }
+    clearFailedLogins(req);
+    issueSession(res);
+    res.json({ ok: true });
+  }),
+);
+
+api.post(
+  "/login/2fa",
+  loginLimiter,
+  wrap((req, res) => {
+    const ticket = String(req.body?.ticket ?? "");
+    const code = String(req.body?.code ?? "");
+    const secret = totpSecret();
+    if (!secret || !redeemPendingLogin(ticket)) throw new HttpError(401, "Sign-in expired. Start again.");
+    if (!verifyTotp(secret, code)) {
+      noteFailedLogin(req);
+      throw new HttpError(401, "Wrong code. Check the time on your phone and try again.");
+    }
+    finishPendingLogin(ticket);
     clearFailedLogins(req);
     issueSession(res);
     res.json({ ok: true });
@@ -257,9 +303,50 @@ api.post(
     const current = String(req.body?.current ?? "");
     const next = str(req.body?.next, "New password", { required: true }) as string;
     if (!verifyPassword(current)) throw new HttpError(400, "Current password is wrong");
-    if (next.length < 6) throw new HttpError(400, "Password must be at least 6 characters");
+    if (next.length < MIN_PASSWORD) throw new HttpError(400, `Password must be at least ${MIN_PASSWORD} characters`);
     changePassword(next);
     issueSession(res);
+    res.json({ ok: true });
+  }),
+);
+
+// ---------- two-factor setup ----------
+
+/** Start enrolment: returns a QR code and the secret to type by hand. Nothing changes until /2fa/enable. */
+api.post(
+  "/2fa/setup",
+  requireAuth,
+  wrap(async (req, res) => {
+    const current = String(req.body?.current ?? "");
+    if (!verifyPassword(current)) throw new HttpError(400, "Current password is wrong");
+    const secret = generateSecret();
+    setTotpPending(secret);
+    const url = otpauthUrl(secret, userEmail() || "me");
+    const qr = await QRCode.toDataURL(url, { margin: 1, width: 220 });
+    res.json({ secret, qr });
+  }),
+);
+
+api.post(
+  "/2fa/enable",
+  requireAuth,
+  wrap((req, res) => {
+    const pending = totpPending();
+    if (!pending) throw new HttpError(400, "Start the setup first");
+    if (!verifyTotp(pending, String(req.body?.code ?? ""))) throw new HttpError(400, "That code does not match. Try the next one.");
+    enableTotp(pending);
+    res.json({ ok: true });
+  }),
+);
+
+api.post(
+  "/2fa/disable",
+  requireAuth,
+  wrap((req, res) => {
+    const secret = totpSecret();
+    if (!verifyPassword(String(req.body?.current ?? ""))) throw new HttpError(400, "Current password is wrong");
+    if (secret && !verifyTotp(secret, String(req.body?.code ?? ""))) throw new HttpError(400, "Wrong authenticator code");
+    disableTotp();
     res.json({ ok: true });
   }),
 );

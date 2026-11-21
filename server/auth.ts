@@ -93,6 +93,66 @@ export function requireAuth(req: Request, res: Response, next: NextFunction) {
   res.status(401).json({ error: "Not signed in" });
 }
 
+// ---------- two-factor (TOTP) ----------
+
+export function totpSecret(): string | null {
+  const row = db.prepare("SELECT totp_secret FROM user WHERE id = 1").get() as { totp_secret: string | null } | undefined;
+  return row?.totp_secret ?? null;
+}
+export function totpPending(): string | null {
+  const row = db.prepare("SELECT totp_pending FROM user WHERE id = 1").get() as { totp_pending: string | null } | undefined;
+  return row?.totp_pending ?? null;
+}
+export function setTotpPending(secret: string | null) {
+  db.prepare("UPDATE user SET totp_pending = ? WHERE id = 1").run(secret);
+}
+export function enableTotp(secret: string) {
+  db.prepare("UPDATE user SET totp_secret = ?, totp_pending = NULL WHERE id = 1").run(secret);
+}
+export function disableTotp() {
+  db.prepare("UPDATE user SET totp_secret = NULL, totp_pending = NULL WHERE id = 1").run();
+}
+
+/** After a correct password, the browser gets a short-lived ticket it must redeem with a 2FA code. */
+const pendingLogins = new Map<string, number>();
+export function issuePendingLogin(): string {
+  const t = crypto.randomBytes(24).toString("hex");
+  pendingLogins.set(t, Date.now() + 5 * 60_000);
+  return t;
+}
+export function redeemPendingLogin(t: string): boolean {
+  const exp = pendingLogins.get(t);
+  if (!exp) return false;
+  if (exp < Date.now()) {
+    pendingLogins.delete(t);
+    return false;
+  }
+  return true;
+}
+export function finishPendingLogin(t: string) {
+  pendingLogins.delete(t);
+}
+
+// ---------- Cloudflare Turnstile ("I am human" checkbox) ----------
+
+export const TURNSTILE_SITE_KEY = process.env.TURNSTILE_SITE_KEY || "";
+const TURNSTILE_SECRET = process.env.TURNSTILE_SECRET || "";
+export const turnstileEnabled = !!(TURNSTILE_SITE_KEY && TURNSTILE_SECRET);
+
+export async function verifyTurnstile(token: unknown, ip: string | undefined): Promise<boolean> {
+  if (!turnstileEnabled) return true;
+  if (!token || typeof token !== "string") return false;
+  try {
+    const body = new URLSearchParams({ secret: TURNSTILE_SECRET, response: token });
+    if (ip) body.set("remoteip", ip);
+    const r = await fetch("https://challenges.cloudflare.com/turnstile/v0/siteverify", { method: "POST", body, signal: AbortSignal.timeout(8000) });
+    const data = (await r.json()) as { success?: boolean };
+    return !!data.success;
+  } catch {
+    return false;
+  }
+}
+
 // Simple in-memory limiter for password attempts.
 const attempts = new Map<string, { count: number; until: number }>();
 

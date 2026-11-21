@@ -3,7 +3,7 @@ import { api, ApiError } from "./api";
 import type { AppState } from "./types";
 import { makeConv, makeFormatter } from "./money";
 
-type Auth = { setup: boolean; authed: boolean; email?: string | null };
+type Auth = { setup: boolean; authed: boolean; email?: string | null; twoFactor?: boolean; turnstileSiteKey?: string };
 
 interface Toast {
   id: number;
