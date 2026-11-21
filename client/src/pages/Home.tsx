@@ -8,11 +8,14 @@ import { BillForm, PayBillForm } from "../components/BillForms";
 import { BudgetCard } from "../components/Budget";
 import { Empty } from "../components/ui";
 import { TxRow } from "./Transactions";
+import { TwoFactorForm } from "./Settings";
 
 export function Home() {
-  const { state, fmt, fmt2, fmtIn, locale } = useData();
+  const { state, fmt, fmt2, fmtIn, locale, auth, refreshAuth } = useData();
   const today = todayStr();
   const rolling = state.settings.savings_mode === "rolling";
+  const [twoFa, setTwoFa] = useState(false);
+  const needTwoFa = auth?.twoFactor === false;
   const ov = useMemo(() => overview(state, today), [state, today]);
   const paid = useMemo(() => billPaidMap(state), [state]);
   const [editing, setEditing] = useState<Transaction | null>(null);
@@ -34,6 +37,28 @@ export function Home() {
   return (
     <>
       <div className="main">
+        {needTwoFa && (
+          <div className="card" style={{ borderColor: "var(--accent)" }}>
+            <div className="between">
+              <div>
+                <div className="bold">🔐 Protect your account</div>
+                <div className="small muted">Add the authenticator code so a password alone can't open your money. Takes a minute.</div>
+              </div>
+              <button className="btn primary sm" onClick={() => setTwoFa(true)}>
+                Set up
+              </button>
+            </div>
+          </div>
+        )}
+        {twoFa && (
+          <TwoFactorForm
+            enabled={false}
+            onClose={() => {
+              setTwoFa(false);
+              refreshAuth();
+            }}
+          />
+        )}
 
         <div className="hero">
           {rolling ? (

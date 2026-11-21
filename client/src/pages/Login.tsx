@@ -50,13 +50,6 @@ export function Login() {
   const { auth, refreshAuth } = useStore();
   const setup = !auth?.setup;
   const siteKey = auth?.turnstileSiteKey || "";
-  const [email, setEmail] = useState(() => {
-    try {
-      return localStorage.getItem("pmf_email") || "";
-    } catch {
-      return "";
-    }
-  });
   const [password, setPassword] = useState("");
   const [confirm, setConfirm] = useState("");
   const [turnstile, setTurnstile] = useState("");
@@ -72,12 +65,7 @@ export function Login() {
     if (siteKey && !turnstile) return setError("Please tick the “I am human” box");
     setBusy(true);
     try {
-      const r = await api.post<{ ok: boolean; twoFactor?: boolean; ticket?: string }>(setup ? "/api/setup" : "/api/login", { email, password, turnstile });
-      try {
-        localStorage.setItem("pmf_email", email.trim());
-      } catch {
-        /* private mode */
-      }
+      const r = await api.post<{ ok: boolean; twoFactor?: boolean; ticket?: string }>(setup ? "/api/setup" : "/api/login", { password, turnstile });
       if (r.twoFactor && r.ticket) {
         setTicket(r.ticket);
         return;
@@ -148,21 +136,20 @@ export function Login() {
         ) : (
           <>
             <p className="center muted small mt mb">
-              {setup ? "Welcome. Choose your login email and a password. There is only one account: yours." : "Sign in to continue."}
+              {setup ? "Welcome. Choose a password. There is only one account: yours." : "Enter your password to continue."}
             </p>
-            <form onSubmit={submit}>
+            <form onSubmit={submit} autoComplete="off">
               {error && <div className="form-error">{error}</div>}
-              <Field label="Email">
-                <input type="email" value={email} onChange={(e) => setEmail(e.target.value)} autoFocus={!email} required autoComplete="username" inputMode="email" />
-              </Field>
               <Field label={setup ? "Choose a password" : "Password"}>
                 <input
                   type="password"
+                  name="app-pin"
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
-                  autoFocus={!!email}
+                  autoFocus
                   required
                   minLength={4}
+                  inputMode={/^\d+$/.test(password) || password === "" ? "numeric" : "text"}
                   autoComplete={setup ? "new-password" : "current-password"}
                 />
               </Field>

@@ -10,7 +10,6 @@ const CURRENCIES = ["EUR", "USD", "GBP", "CHF", "PLN", "CZK", "RON", "MDL", "UAH
 
 export function Settings() {
   const { state, run, logout, refresh, toast, currency: mainCurrency, auth, refreshAuth } = useData();
-  const [emailForm, setEmailForm] = useState(false);
   const [twoFa, setTwoFa] = useState(false);
   const s = state.settings;
   const [ownerName, setOwnerName] = useState(s.owner_name ?? "");
@@ -387,7 +386,9 @@ export function Settings() {
             <h2>Security</h2>
           </div>
           <p className="small muted mb">
-            Login email: <b>{auth?.email || "not set"}</b>
+            Sign-in: password
+            {auth?.turnstileSiteKey ? " + human check" : ""}
+            {auth?.twoFactor ? " + authenticator code" : ""}.
             <br />
             Two-factor codes: {auth?.twoFactor ? <span className="pill good">On</span> : <span className="pill warn">Off</span>}
             {auth?.turnstileSiteKey ? (
@@ -403,9 +404,6 @@ export function Settings() {
             </button>
             <button className="btn" onClick={() => setPwd(true)}>
               Change password
-            </button>
-            <button className="btn" onClick={() => setEmailForm(true)}>
-              Change email
             </button>
             <button className="btn danger" onClick={logout}>
               Sign out
@@ -426,20 +424,11 @@ export function Settings() {
           }}
         />
       )}
-      {emailForm && (
-        <EmailForm
-          current={auth?.email || ""}
-          onClose={() => {
-            setEmailForm(false);
-            refreshAuth();
-          }}
-        />
-      )}
     </>
   );
 }
 
-function TwoFactorForm({ enabled, onClose }: { enabled: boolean; onClose: () => void }) {
+export function TwoFactorForm({ enabled, onClose }: { enabled: boolean; onClose: () => void }) {
   const { toast } = useData();
   const [password, setPassword] = useState("");
   const [code, setCode] = useState("");

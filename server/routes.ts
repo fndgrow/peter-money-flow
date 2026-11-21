@@ -17,7 +17,6 @@ import {
   userEmail,
   setUserEmail,
   normalizeEmail,
-  emailMatches,
   totpSecret,
   totpPending,
   setTotpPending,
@@ -241,11 +240,12 @@ api.post(
   wrap(async (req, res) => {
     if (hasUser()) throw new HttpError(400, "Already set up");
     if (!(await verifyTurnstile(req.body?.turnstile, req.ip))) throw new HttpError(400, "Please tick the “I am human” box");
+    // Email is optional: it only labels the authenticator entry.
     const email = normalizeEmail(req.body?.email);
-    if (!EMAIL_RE.test(email)) throw new HttpError(400, "Enter a valid email address");
+    if (email && !EMAIL_RE.test(email)) throw new HttpError(400, "Enter a valid email address");
     const password = str(req.body?.password, "Password", { required: true }) as string;
     if (password.length < MIN_PASSWORD) throw new HttpError(400, `Password must be at least ${MIN_PASSWORD} characters`);
-    createUser(password, email);
+    createUser(password, email || "me");
     issueSession(res);
     res.json({ ok: true });
   }),
@@ -256,11 +256,11 @@ api.post(
   loginLimiter,
   wrap(async (req, res) => {
     if (!(await verifyTurnstile(req.body?.turnstile, req.ip))) throw new HttpError(400, "Please tick the “I am human” box");
-    const email = normalizeEmail(req.body?.email);
+    // Password only (plus the human check and, when enabled, the authenticator code).
     const password = String(req.body?.password ?? "");
-    if (!emailMatches(email) || !verifyPassword(password)) {
+    if (!verifyPassword(password)) {
       noteFailedLogin(req);
-      throw new HttpError(401, "Wrong email or password");
+      throw new HttpError(401, "Wrong password");
     }
     if (totpSecret()) {
       // Password is right; now ask for the authenticator code.
