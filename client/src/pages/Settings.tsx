@@ -388,7 +388,8 @@ export function Settings() {
           <p className="small muted mb">
             Sign-in: password
             {auth?.turnstileSiteKey ? " + human check" : ""}
-            {auth?.twoFactor ? " + authenticator code" : ""}.
+            {auth?.twoFactor ? " + authenticator code" : ""}. A sign-in lasts <b>24 hours</b> on that device, then everything is asked again.
+            Any other phone or computer must sign in the same way.
             <br />
             Two-factor codes: {auth?.twoFactor ? <span className="pill good">On</span> : <span className="pill warn">Off</span>}
             {auth?.turnstileSiteKey ? (
@@ -405,8 +406,21 @@ export function Settings() {
             <button className="btn" onClick={() => setPwd(true)}>
               Change password
             </button>
+            <button
+              className="btn"
+              onClick={async () => {
+                try {
+                  const r = await api.post<{ removed: number }>("/api/sessions/clear-others");
+                  toast(r.removed ? `Signed out ${r.removed} other device${r.removed === 1 ? "" : "s"}` : "No other devices were signed in");
+                } catch (e) {
+                  toast((e as Error).message, "error");
+                }
+              }}
+            >
+              Sign out other devices
+            </button>
             <button className="btn danger" onClick={logout}>
-              Sign out
+              Sign out here
             </button>
           </div>
         </div>

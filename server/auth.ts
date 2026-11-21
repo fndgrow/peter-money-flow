@@ -4,7 +4,8 @@ import type { Request, Response, NextFunction } from "express";
 import { db, nowIso } from "./db.js";
 
 const COOKIE = "pmf_session";
-const SESSION_DAYS = 90;
+/** A sign-in lasts this long on a device; afterwards password (+ human check + code) again. */
+const SESSION_HOURS = 24;
 
 export function hasUser(): boolean {
   const row = db.prepare("SELECT id FROM user WHERE id = 1").get();
@@ -53,7 +54,7 @@ export function verifyPassword(password: string): boolean {
 
 export function issueSession(res: Response) {
   const token = crypto.randomBytes(32).toString("hex");
-  const expires = new Date(Date.now() + SESSION_DAYS * 86400_000);
+  const expires = new Date(Date.now() + SESSION_HOURS * 3600_000);
   db.prepare("INSERT INTO sessions (token, created_at, expires_at) VALUES (?, ?, ?)").run(
     token,
     nowIso(),
@@ -66,6 +67,19 @@ export function issueSession(res: Response) {
     expires,
     path: "/",
   });
+}
+
+/** Sign out every other device: keeps only the session making the request. */
+export function clearOtherSessions(req: Request): number {
+  const token = req.cookies?.[COOKIE] ?? "";
+  const r = db.prepare("DELETE FROM sessions WHERE token != ?").run(token);
+  return Number(r.changes);
+}
+
+/** How many devices are currently signed in (unexpired sessions). */
+export function activeSessionCount(): number {
+  const row = db.prepare("SELECT COUNT(*) AS n FROM sessions WHERE expires_at > ?").get(nowIso()) as { n: number };
+  return row.n;
 }
 
 export function clearSession(req: Request, res: Response) {

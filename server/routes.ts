@@ -9,6 +9,8 @@ import {
   verifyPassword,
   issueSession,
   clearSession,
+  clearOtherSessions,
+  activeSessionCount,
   isAuthed,
   requireAuth,
   loginLimiter,
@@ -335,7 +337,26 @@ api.post(
     if (!pending) throw new HttpError(400, "Start the setup first");
     if (!verifyTotp(pending, String(req.body?.code ?? ""))) throw new HttpError(400, "That code does not match. Try the next one.");
     enableTotp(pending);
+    // From now on every other device must sign in again with the code.
+    clearOtherSessions(req);
     res.json({ ok: true });
+  }),
+);
+
+/** Sign out every device except this one. */
+api.post(
+  "/sessions/clear-others",
+  requireAuth,
+  wrap((req, res) => {
+    res.json({ removed: clearOtherSessions(req) });
+  }),
+);
+
+api.get(
+  "/sessions",
+  requireAuth,
+  wrap((_req, res) => {
+    res.json({ active: activeSessionCount() });
   }),
 );
 
