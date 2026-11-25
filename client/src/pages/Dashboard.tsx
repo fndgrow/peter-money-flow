@@ -4,7 +4,7 @@ import { useData } from "../lib/store";
 import { addDays, daysBetween, formatDate, makeConv, monthEnd, monthKey, monthLabel, shiftMonth, todayStr } from "../lib/money";
 import type { Category, Transaction } from "../lib/types";
 import { Bars, Donut, Legend, Line, OTHER_COLOR, SERIES, type Slice } from "../components/charts";
-import { Empty } from "../components/ui";
+import { CompanyLogo, Empty } from "../components/ui";
 
 type PeriodKey = "month" | "last" | "3m" | "6m" | "year" | "all";
 const PERIODS: { key: PeriodKey; label: string }[] = [
@@ -414,7 +414,9 @@ export function Dashboard() {
               <div className="rank">
                 {companies.rows.map((p) => (
                   <Link key={p.id} to={`/transactions?project=${p.id}`} className="rank-row" style={{ color: "inherit" }}>
-                    <span className="n">🏢 {p.name}</span>
+                    <span className="n" style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                      <CompanyLogo project={state.projects.find((x) => x.id === p.id)} size={26} /> {p.name}
+                    </span>
                     <span className="amt">
                       {fmt(p.amount)} <span className="muted tiny">{income ? Math.round((p.amount / income) * 100) : 0}%</span>
                     </span>

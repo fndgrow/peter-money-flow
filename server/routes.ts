@@ -1,7 +1,12 @@
 import { Router } from "express";
 import type { Request, Response } from "express";
+import fs from "node:fs";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
 import { buildWorkbook } from "./export.js";
-import { db, allSettings, setSetting, nowIso } from "./db.js";
+import { db, allSettings, setSetting, nowIso, DB_PATH } from "./db.js";
+
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
 import {
   hasUser,
   createUser,
@@ -633,12 +638,21 @@ api.delete(
 
 // ---------- projects ----------
 
+/** A logo is either a bundled brand image (/brand/x.png) or an uploaded file (/api/files/x.png). */
+function logoPath(v: unknown): string | null {
+  const s = str(v, "Logo", { max: 200 });
+  if (!s) return null;
+  if (!/^\/(brand|api\/files)\/[A-Za-z0-9._-]+$/.test(s)) throw new HttpError(400, "Logo must be one of the available images");
+  return s;
+}
+
 api.post(
   "/projects",
   wrap((req, res) => {
     const name = str(req.body?.name, "Name", { required: true, max: 80 });
     const note = str(req.body?.note, "Note", { max: 500 });
-    const r = db.prepare("INSERT INTO projects (name, note) VALUES (?, ?)").run(name, note);
+    const logo = logoPath(req.body?.logo);
+    const r = db.prepare("INSERT INTO projects (name, note, logo) VALUES (?, ?, ?)").run(name, note, logo);
     res.json({ id: Number(r.lastInsertRowid) });
   }),
 );
@@ -651,10 +665,55 @@ api.put(
     const name = str(req.body?.name, "Name", { required: true, max: 80 });
     const note = str(req.body?.note, "Note", { max: 500 });
     const status = oneOf(req.body?.status, "Status", ["active", "done"] as const, "active");
-    db.prepare("UPDATE projects SET name = ?, note = ?, status = ? WHERE id = ?").run(name, note, status, pid);
+    const logo = logoPath(req.body?.logo);
+    db.prepare("UPDATE projects SET name = ?, note = ?, status = ?, logo = ? WHERE id = ?").run(name, note, status, logo, pid);
     res.json({ ok: true });
   }),
 );
+
+// ---------- logos (bundled brand images + uploads) ----------
+
+const UPLOAD_DIR = path.join(path.dirname(DB_PATH), "uploads");
+const BRAND_DIRS = [path.resolve(__dirname, "../client/brand"), path.resolve(process.cwd(), "client/public/brand")];
+
+api.get("/logos", (_req, res) => {
+  const out: { url: string; name: string }[] = [];
+  const brandDir = BRAND_DIRS.find((d) => fs.existsSync(d));
+  if (brandDir) {
+    for (const f of fs.readdirSync(brandDir).sort()) if (/\.(png|jpe?g|webp|svg)$/i.test(f)) out.push({ url: `/brand/${f}`, name: f.replace(/\.[^.]+$/, "") });
+  }
+  if (fs.existsSync(UPLOAD_DIR)) {
+    for (const f of fs.readdirSync(UPLOAD_DIR).sort()) if (/\.(png|jpe?g|webp|svg)$/i.test(f)) out.push({ url: `/api/files/${f}`, name: f.replace(/^\d+-/, "").replace(/\.[^.]+$/, "") });
+  }
+  res.json(out);
+});
+
+/** Upload a logo as a data URL (max 2 MB). Returns the URL to store on the company. */
+api.post(
+  "/logos",
+  wrap((req, res) => {
+    const data = String(req.body?.data ?? "");
+    const m = /^data:image\/(png|jpeg|jpg|webp|svg\+xml);base64,([A-Za-z0-9+/=]+)$/.exec(data);
+    if (!m) throw new HttpError(400, "Choose a PNG, JPG, WEBP or SVG image");
+    const buf = Buffer.from(m[2], "base64");
+    if (buf.length > 2 * 1024 * 1024) throw new HttpError(400, "Image is too large (max 2 MB)");
+    const ext = m[1] === "svg+xml" ? "svg" : m[1] === "jpeg" ? "jpg" : m[1];
+    const base = (str(req.body?.name, "Name", { max: 40 }) || "logo").toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "") || "logo";
+    const file = `${Date.now()}-${base}.${ext}`;
+    fs.mkdirSync(UPLOAD_DIR, { recursive: true });
+    fs.writeFileSync(path.join(UPLOAD_DIR, file), buf);
+    res.json({ url: `/api/files/${file}` });
+  }),
+);
+
+api.get("/files/:name", (req, res) => {
+  const name = String(req.params.name);
+  if (!/^[A-Za-z0-9._-]+$/.test(name)) return res.status(400).end();
+  const file = path.join(UPLOAD_DIR, name);
+  if (!fs.existsSync(file)) return res.status(404).end();
+  res.setHeader("Cache-Control", "private, max-age=86400");
+  res.sendFile(file);
+});
 
 api.delete(
   "/projects/:id",

@@ -5,3 +5,9 @@ data/
 *.log
 .DS_Store
 client/dev-dist/
+
+# brand source files dropped in the project root (processed copies live in client/public/brand)
+/*.jpg
+/*.jpeg
+/*.svg
+/*.png

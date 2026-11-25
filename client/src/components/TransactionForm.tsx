@@ -5,7 +5,7 @@ import { todayStr } from "../lib/money";
 import { CategoryPicker } from "./CategoryPicker";
 import { QuickNameForm } from "./QuickNameForm";
 import type { Transaction, TxType } from "../lib/types";
-import { ConfirmDelete, Field, Segmented, Sheet } from "./ui";
+import { CompanyLogo, ConfirmDelete, Field, Segmented, Sheet } from "./ui";
 
 interface Props {
   initialType?: TxType;
@@ -252,6 +252,7 @@ export function TransactionForm({ initialType = "expense", existing, onClose }: 
               </Field>
               <Field label={type === "income" ? "From company / project" : "Company / project (optional)"}>
                 <div className="flex">
+                  <CompanyLogo project={projects.find((p) => String(p.id) === projectId)} size={34} />
                   <select value={projectId} onChange={(e) => setProjectId(e.target.value)} style={{ flex: 1 }}>
                     <option value="">None</option>
                     {projects.map((p) => (

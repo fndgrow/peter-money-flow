@@ -37,6 +37,8 @@ export interface Project {
   name: string;
   status: "active" | "done";
   note: string | null;
+  /** Company logo URL (/brand/… or /api/files/…), or null. */
+  logo?: string | null;
 }
 
 export interface Bill {

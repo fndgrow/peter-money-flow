@@ -4,7 +4,7 @@ import { useData } from "../lib/store";
 import { categoryGroups } from "../lib/money";
 import type { Category, Project } from "../lib/types";
 import { CategoryForm, ProjectForm } from "../components/EntityForms";
-import { Field, Sheet } from "../components/ui";
+import { CompanyLogo, Field, Sheet } from "../components/ui";
 
 const CURRENCIES = ["EUR", "USD", "GBP", "CHF", "PLN", "CZK", "RON", "MDL", "UAH", "RUB", "TRY", "AED", "ILS", "SEK", "NOK", "DKK", "CAD", "AUD", "JPY", "INR"];
 
@@ -345,8 +345,8 @@ export function Settings() {
           ) : (
             <div className="chips">
               {state.projects.map((p) => (
-                <button key={p.id} className="chip" style={{ opacity: p.status === "done" ? 0.6 : 1 }} onClick={() => setEditProject(p)}>
-                  📁 {p.name}
+                <button key={p.id} className="chip" style={{ opacity: p.status === "done" ? 0.6 : 1, display: "inline-flex", alignItems: "center", gap: 6 }} onClick={() => setEditProject(p)}>
+                  <CompanyLogo project={p} size={20} /> {p.name}
                 </button>
               ))}
             </div>

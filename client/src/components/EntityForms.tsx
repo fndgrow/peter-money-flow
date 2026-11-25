@@ -1,4 +1,4 @@
-import { useState, type FormEvent } from "react";
+import { useEffect, useRef, useState, type FormEvent } from "react";
 import { api } from "../lib/api";
 import { useData } from "../lib/store";
 import type { Account, AccountType, Category, Goal, Person, Project } from "../lib/types";
@@ -192,16 +192,40 @@ export function PersonForm({ existing, onClose }: { existing?: Person; onClose: 
 }
 
 export function ProjectForm({ existing, onClose }: { existing?: Project; onClose: () => void }) {
-  const { run } = useData();
+  const { run, toast } = useData();
   const [name, setName] = useState(existing?.name ?? "");
   const [note, setNote] = useState(existing?.note ?? "");
   const [status, setStatus] = useState<"active" | "done">(existing?.status ?? "active");
+  const [logo, setLogo] = useState<string>(existing?.logo ?? "");
+  const [logos, setLogos] = useState<{ url: string; name: string }[]>([]);
   const [busy, setBusy] = useState(false);
+  const fileRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    api.get<{ url: string; name: string }[]>("/api/logos").then(setLogos).catch(() => setLogos([]));
+  }, []);
+
+  async function upload(file: File) {
+    if (file.size > 2 * 1024 * 1024) return toast("Image is too large (max 2 MB)", "error");
+    const data = await new Promise<string>((resolve, reject) => {
+      const r = new FileReader();
+      r.onload = () => resolve(String(r.result));
+      r.onerror = () => reject(new Error("Could not read the file"));
+      r.readAsDataURL(file);
+    });
+    try {
+      const r = await api.post<{ url: string }>("/api/logos", { name: name || file.name, data });
+      setLogos((l) => [...l, { url: r.url, name: file.name }]);
+      setLogo(r.url);
+    } catch (e) {
+      toast((e as Error).message, "error");
+    }
+  }
 
   async function submit(e: FormEvent) {
     e.preventDefault();
     setBusy(true);
-    const body = { name, note, status };
+    const body = { name, note, status, logo: logo || null };
     const ok = await run(() => (existing ? api.put(`/api/projects/${existing.id}`, body) : api.post("/api/projects", body)), "Saved");
     setBusy(false);
     if (ok) onClose();
@@ -215,8 +239,55 @@ export function ProjectForm({ existing, onClose }: { existing?: Project; onClose
   return (
     <Sheet title={existing ? "Edit project" : "New project"} onClose={onClose}>
       <form onSubmit={submit}>
-        <Field label="Name" hint="Tag income and costs with a project to see its profit.">
-          <input value={name} onChange={(e) => setName(e.target.value)} required maxLength={80} autoFocus placeholder="e.g. Website for Anna" />
+        <Field label="Name" hint="A company that pays you, or a one-off project. Tag income and costs with it to see what each brings in.">
+          <input value={name} onChange={(e) => setName(e.target.value)} required maxLength={80} autoFocus placeholder="e.g. Lithénza" />
+        </Field>
+        <Field label="Logo" hint="Shown next to the company across the app.">
+          <div className="chips" style={{ alignItems: "center" }}>
+            <button
+              type="button"
+              className={`chip ${logo === "" ? "active" : ""}`}
+              onClick={() => setLogo("")}
+              title="No logo"
+              style={{ width: 52, height: 52, borderRadius: 14, padding: 0, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 20 }}
+            >
+              🏢
+            </button>
+            {logos.map((l) => (
+              <button
+                key={l.url}
+                type="button"
+                onClick={() => setLogo(l.url)}
+                title={l.name}
+                style={{
+                  width: 52,
+                  height: 52,
+                  borderRadius: 14,
+                  padding: 0,
+                  overflow: "hidden",
+                  border: logo === l.url ? "3px solid var(--accent)" : "1px solid var(--line)",
+                  background: "#0d0d0d",
+                  cursor: "pointer",
+                }}
+              >
+                <img src={l.url} alt={l.name} width={52} height={52} style={{ display: "block", width: "100%", height: "100%", objectFit: "cover" }} />
+              </button>
+            ))}
+            <button type="button" className="chip ghost" onClick={() => fileRef.current?.click()} style={{ height: 52, borderRadius: 14 }}>
+              ⬆ Upload
+            </button>
+            <input
+              ref={fileRef}
+              type="file"
+              accept="image/png,image/jpeg,image/webp,image/svg+xml"
+              style={{ display: "none" }}
+              onChange={(e) => {
+                const f = e.target.files?.[0];
+                if (f) upload(f);
+                e.target.value = "";
+              }}
+            />
+          </div>
         </Field>
         {existing && (
           <Field label="Status">

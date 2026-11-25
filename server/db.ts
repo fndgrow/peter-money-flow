@@ -114,6 +114,7 @@ addColumn("bills", "direction", "TEXT NOT NULL DEFAULT 'out'"); // 'out': I pay 
 addColumn("bills", "project_id", "INTEGER REFERENCES projects(id) ON DELETE SET NULL"); // company that owes me (or that a payment relates to)
 addColumn("user", "totp_secret", "TEXT"); // base32 secret once two-factor is enabled
 addColumn("user", "totp_pending", "TEXT"); // secret being set up, not yet confirmed
+addColumn("projects", "logo", "TEXT"); // company logo: /brand/<file> or /api/files/<upload>
 
 /** Older rows have no currency: assume the main currency. Safe to run on every start. */
 export function fillCurrencies() {

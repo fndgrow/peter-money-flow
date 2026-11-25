@@ -4,7 +4,7 @@ import { useData } from "../lib/store";
 import { catLabel, categoryGroups, formatDate, monthKey, monthLabel, shiftMonth, txInMain } from "../lib/money";
 import type { Transaction, TxType } from "../lib/types";
 import { TransactionForm } from "../components/TransactionForm";
-import { Empty, Money } from "../components/ui";
+import { CompanyLogo, Empty, Money } from "../components/ui";
 
 export function TxRow({ t, onClick }: { t: Transaction; onClick: () => void }) {
   const { state, locale, fmtIn, currency } = useData();
@@ -25,7 +25,9 @@ export function TxRow({ t, onClick }: { t: Transaction; onClick: () => void }) {
   } else if (t.note) parts.push(t.note);
   return (
     <button className="row-item" onClick={onClick}>
-      <div className="ic">{icon}</div>
+      <div className="ic" style={project?.logo ? { padding: 0, overflow: "hidden", background: "#0d0d0d" } : undefined}>
+        {project?.logo ? <CompanyLogo project={project} size={42} radius={14} /> : icon}
+      </div>
       <div className="body">
         <div className="t">{title}</div>
         <div className="s">{parts.join(" · ")}</div>

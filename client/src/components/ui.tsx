@@ -152,6 +152,33 @@ export function ConfirmDelete({ onConfirm, label = "Delete" }: { onConfirm: () =
   );
 }
 
+/** A company's logo as a small rounded square; falls back to a building glyph (or nothing when no project). */
+export function CompanyLogo({ project, size = 24, radius }: { project?: { name: string; logo?: string | null } | null; size?: number; radius?: number }) {
+  if (!project) return null;
+  const r = radius ?? Math.round(size * 0.3);
+  if (!project.logo) {
+    return (
+      <span
+        aria-hidden
+        style={{ width: size, height: size, borderRadius: r, background: "var(--card-2)", display: "inline-flex", alignItems: "center", justifyContent: "center", fontSize: size * 0.55, flexShrink: 0 }}
+      >
+        🏢
+      </span>
+    );
+  }
+  return (
+    <img
+      src={project.logo}
+      alt={project.name}
+      title={project.name}
+      width={size}
+      height={size}
+      loading="lazy"
+      style={{ width: size, height: size, borderRadius: r, objectFit: "cover", background: "#0d0d0d", flexShrink: 0, display: "inline-block", verticalAlign: "middle" }}
+    />
+  );
+}
+
 export const Icons = {
   home: (
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
