@@ -152,6 +152,26 @@ export function ConfirmDelete({ onConfirm, label = "Delete" }: { onConfirm: () =
   );
 }
 
+/**
+ * A category's icon: its image logo when it has one, otherwise the emoji.
+ * `size` is only used for the image; the emoji follows the surrounding font size.
+ */
+export function CatIcon({ cat, size = 18, fallback = "" }: { cat?: { icon?: string | null; logo?: string | null; name?: string } | null; size?: number; fallback?: string }) {
+  if (cat?.logo) {
+    return (
+      <img
+        src={cat.logo}
+        alt={cat.name ?? ""}
+        width={size}
+        height={size}
+        loading="lazy"
+        style={{ width: size, height: size, borderRadius: Math.round(size * 0.3), objectFit: "cover", flexShrink: 0, display: "inline-block", verticalAlign: "middle" }}
+      />
+    );
+  }
+  return <>{cat?.icon ?? fallback}</>;
+}
+
 /** A company's logo as a small rounded square; falls back to a building glyph (or nothing when no project). */
 export function CompanyLogo({ project, size = 24, radius }: { project?: { name: string; logo?: string | null } | null; size?: number; radius?: number }) {
   if (!project) return null;

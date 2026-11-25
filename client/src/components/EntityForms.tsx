@@ -4,6 +4,74 @@ import { useData } from "../lib/store";
 import type { Account, AccountType, Category, Goal, Person, Project } from "../lib/types";
 import { ConfirmDelete, Field, Sheet } from "./ui";
 
+/** Pick one of the available logo images, upload a new one, or choose none. */
+export function LogoPicker({ value, onChange, nameHint, emptyGlyph }: { value: string; onChange: (url: string) => void; nameHint: string; emptyGlyph: string }) {
+  const { toast } = useData();
+  const [logos, setLogos] = useState<{ url: string; name: string }[]>([]);
+  const fileRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    api.get<{ url: string; name: string }[]>("/api/logos").then(setLogos).catch(() => setLogos([]));
+  }, []);
+
+  async function upload(file: File) {
+    if (file.size > 2 * 1024 * 1024) return toast("Image is too large (max 2 MB)", "error");
+    const data = await new Promise<string>((resolve, reject) => {
+      const r = new FileReader();
+      r.onload = () => resolve(String(r.result));
+      r.onerror = () => reject(new Error("Could not read the file"));
+      r.readAsDataURL(file);
+    });
+    try {
+      const r = await api.post<{ url: string }>("/api/logos", { name: nameHint || file.name, data });
+      setLogos((l) => [...l, { url: r.url, name: file.name }]);
+      onChange(r.url);
+    } catch (e) {
+      toast((e as Error).message, "error");
+    }
+  }
+
+  const tile = { width: 52, height: 52, borderRadius: 14, padding: 0, cursor: "pointer" } as const;
+  return (
+    <div className="chips" style={{ alignItems: "center" }}>
+      <button
+        type="button"
+        className={`chip ${value === "" ? "active" : ""}`}
+        onClick={() => onChange("")}
+        title="No logo"
+        style={{ ...tile, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 20 }}
+      >
+        {emptyGlyph || "–"}
+      </button>
+      {logos.map((l) => (
+        <button
+          key={l.url}
+          type="button"
+          onClick={() => onChange(l.url)}
+          title={l.name}
+          style={{ ...tile, overflow: "hidden", border: value === l.url ? "3px solid var(--accent)" : "1px solid var(--line)", background: "#0d0d0d" }}
+        >
+          <img src={l.url} alt={l.name} width={52} height={52} style={{ display: "block", width: "100%", height: "100%", objectFit: "cover" }} />
+        </button>
+      ))}
+      <button type="button" className="chip ghost" onClick={() => fileRef.current?.click()} style={{ height: 52, borderRadius: 14 }}>
+        ⬆ Upload
+      </button>
+      <input
+        ref={fileRef}
+        type="file"
+        accept="image/png,image/jpeg,image/webp,image/svg+xml"
+        style={{ display: "none" }}
+        onChange={(e) => {
+          const f = e.target.files?.[0];
+          if (f) upload(f);
+          e.target.value = "";
+        }}
+      />
+    </div>
+  );
+}
+
 export function AccountForm({ existing, onClose }: { existing?: Account; onClose: () => void }) {
   const { run, state, currencies, currency: mainCurrency } = useData();
   const [name, setName] = useState(existing?.name ?? "");
@@ -85,6 +153,7 @@ export function CategoryForm({
   const { run, state } = useData();
   const [name, setName] = useState(existing?.name ?? "");
   const [icon, setIcon] = useState(existing?.icon ?? "");
+  const [logo, setLogo] = useState<string>(existing?.logo ?? "");
   const [parentId, setParentId] = useState(String(existing?.parent_id ?? presetParentId ?? ""));
   const [archived, setArchived] = useState(!!existing?.archived);
   const [busy, setBusy] = useState(false);
@@ -94,7 +163,7 @@ export function CategoryForm({
   async function submit(e: FormEvent) {
     e.preventDefault();
     setBusy(true);
-    const body = { name, icon, kind, archived, parent_id: parentId || null };
+    const body = { name, icon, kind, archived, parent_id: parentId || null, logo: logo || null };
     const ok = await run(() => (existing ? api.put(`/api/categories/${existing.id}`, body) : api.post("/api/categories", body)), "Saved");
     setBusy(false);
     if (ok) onClose();
@@ -116,6 +185,9 @@ export function CategoryForm({
             <input value={name} onChange={(e) => setName(e.target.value)} required maxLength={60} autoFocus />
           </Field>
         </div>
+        <Field label="Logo (optional)" hint="An image shown instead of the emoji, e.g. the logo of the place you pay.">
+          <LogoPicker value={logo} onChange={setLogo} nameHint={name} emptyGlyph={icon || "🙂"} />
+        </Field>
         {!hasChildren && (
           <Field label="Belongs to" hint="Choose a parent to make this a sub-category, like Car › Fuel.">
             <select value={parentId} onChange={(e) => setParentId(e.target.value)}>
@@ -192,35 +264,12 @@ export function PersonForm({ existing, onClose }: { existing?: Person; onClose: 
 }
 
 export function ProjectForm({ existing, onClose }: { existing?: Project; onClose: () => void }) {
-  const { run, toast } = useData();
+  const { run } = useData();
   const [name, setName] = useState(existing?.name ?? "");
   const [note, setNote] = useState(existing?.note ?? "");
   const [status, setStatus] = useState<"active" | "done">(existing?.status ?? "active");
   const [logo, setLogo] = useState<string>(existing?.logo ?? "");
-  const [logos, setLogos] = useState<{ url: string; name: string }[]>([]);
   const [busy, setBusy] = useState(false);
-  const fileRef = useRef<HTMLInputElement>(null);
-
-  useEffect(() => {
-    api.get<{ url: string; name: string }[]>("/api/logos").then(setLogos).catch(() => setLogos([]));
-  }, []);
-
-  async function upload(file: File) {
-    if (file.size > 2 * 1024 * 1024) return toast("Image is too large (max 2 MB)", "error");
-    const data = await new Promise<string>((resolve, reject) => {
-      const r = new FileReader();
-      r.onload = () => resolve(String(r.result));
-      r.onerror = () => reject(new Error("Could not read the file"));
-      r.readAsDataURL(file);
-    });
-    try {
-      const r = await api.post<{ url: string }>("/api/logos", { name: name || file.name, data });
-      setLogos((l) => [...l, { url: r.url, name: file.name }]);
-      setLogo(r.url);
-    } catch (e) {
-      toast((e as Error).message, "error");
-    }
-  }
 
   async function submit(e: FormEvent) {
     e.preventDefault();
@@ -243,51 +292,7 @@ export function ProjectForm({ existing, onClose }: { existing?: Project; onClose
           <input value={name} onChange={(e) => setName(e.target.value)} required maxLength={80} autoFocus placeholder="e.g. Lithénza" />
         </Field>
         <Field label="Logo" hint="Shown next to the company across the app.">
-          <div className="chips" style={{ alignItems: "center" }}>
-            <button
-              type="button"
-              className={`chip ${logo === "" ? "active" : ""}`}
-              onClick={() => setLogo("")}
-              title="No logo"
-              style={{ width: 52, height: 52, borderRadius: 14, padding: 0, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 20 }}
-            >
-              🏢
-            </button>
-            {logos.map((l) => (
-              <button
-                key={l.url}
-                type="button"
-                onClick={() => setLogo(l.url)}
-                title={l.name}
-                style={{
-                  width: 52,
-                  height: 52,
-                  borderRadius: 14,
-                  padding: 0,
-                  overflow: "hidden",
-                  border: logo === l.url ? "3px solid var(--accent)" : "1px solid var(--line)",
-                  background: "#0d0d0d",
-                  cursor: "pointer",
-                }}
-              >
-                <img src={l.url} alt={l.name} width={52} height={52} style={{ display: "block", width: "100%", height: "100%", objectFit: "cover" }} />
-              </button>
-            ))}
-            <button type="button" className="chip ghost" onClick={() => fileRef.current?.click()} style={{ height: 52, borderRadius: 14 }}>
-              ⬆ Upload
-            </button>
-            <input
-              ref={fileRef}
-              type="file"
-              accept="image/png,image/jpeg,image/webp,image/svg+xml"
-              style={{ display: "none" }}
-              onChange={(e) => {
-                const f = e.target.files?.[0];
-                if (f) upload(f);
-                e.target.value = "";
-              }}
-            />
-          </div>
+          <LogoPicker value={logo} onChange={setLogo} nameHint={name} emptyGlyph="🏢" />
         </Field>
         {existing && (
           <Field label="Status">

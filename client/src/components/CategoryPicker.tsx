@@ -2,7 +2,7 @@ import { useMemo, useState } from "react";
 import { useData } from "../lib/store";
 import { catLabel, categoryGroups } from "../lib/money";
 import type { Category } from "../lib/types";
-import { Sheet } from "./ui";
+import { CatIcon, Sheet } from "./ui";
 
 /**
  * Category chooser: a field-like button that opens a sheet with the category tree.
@@ -54,7 +54,9 @@ export function CategoryPicker({
     const selected = String(c.id) === value;
     return (
       <button type="button" key={c.id} className={`row-item ${selected ? "selected" : ""}`} onClick={() => pick(c.id)} aria-pressed={selected}>
-        <div className="ic">{c.icon}</div>
+        <div className="ic">
+          <CatIcon cat={c} size={42} />
+        </div>
         <div className="body">
           <div className={sub ? "t sub" : "t"}>{name}</div>
         </div>
@@ -90,7 +92,9 @@ export function CategoryPicker({
               return (
                 <div key={parent.id} className={`cat-group ${isOpen ? "open" : ""}`}>
                   <button type="button" className="row-item" onClick={() => toggle(parent.id)} aria-expanded={isOpen}>
-                    <div className="ic">{parent.icon}</div>
+                    <div className="ic">
+                      <CatIcon cat={parent} size={42} />
+                    </div>
                     <div className="body">
                       <div className="t">{parent.name}</div>
                       {!isOpen && <div className="s">{children.map((c) => c.name).join(" · ")}</div>}

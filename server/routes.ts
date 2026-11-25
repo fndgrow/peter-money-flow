@@ -539,12 +539,13 @@ api.post(
     const name = str(req.body?.name, "Name", { required: true, max: 60 });
     const kind = oneOf(req.body?.kind, "Kind", ["income", "expense"] as const);
     const icon = str(req.body?.icon, "Icon", { max: 8 });
+    const logo = logoPath(req.body?.logo);
     const parentId = parentCategory(req.body?.parent_id, kind, null);
     const r = db
       .prepare(
-        "INSERT INTO categories (name, kind, icon, sort, parent_id) VALUES (?, ?, ?, (SELECT COALESCE(MAX(sort),0)+1 FROM categories WHERE kind = ?), ?)",
+        "INSERT INTO categories (name, kind, icon, sort, parent_id, logo) VALUES (?, ?, ?, (SELECT COALESCE(MAX(sort),0)+1 FROM categories WHERE kind = ?), ?, ?)",
       )
-      .run(name, kind, icon, kind, parentId);
+      .run(name, kind, icon, kind, parentId, logo);
     res.json({ id: Number(r.lastInsertRowid) });
   }),
 );
@@ -576,6 +577,8 @@ api.put(
       if (kids.n > 0) throw new HttpError(400, "This category has sub-categories, so it cannot become a sub-category itself");
     }
     db.prepare("UPDATE categories SET name = ?, icon = ?, archived = ?, parent_id = ? WHERE id = ?").run(name, icon, archived, parentId, catId);
+    // Only touch the logo when the form sent it, so older clients cannot wipe it.
+    if (req.body && "logo" in req.body) db.prepare("UPDATE categories SET logo = ? WHERE id = ?").run(logoPath(req.body.logo), catId);
     res.json({ ok: true });
   }),
 );

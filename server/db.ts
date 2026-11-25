@@ -115,6 +115,7 @@ addColumn("bills", "project_id", "INTEGER REFERENCES projects(id) ON DELETE SET 
 addColumn("user", "totp_secret", "TEXT"); // base32 secret once two-factor is enabled
 addColumn("user", "totp_pending", "TEXT"); // secret being set up, not yet confirmed
 addColumn("projects", "logo", "TEXT"); // company logo: /brand/<file> or /api/files/<upload>
+addColumn("categories", "logo", "TEXT"); // optional image shown instead of the emoji icon
 
 /** Older rows have no currency: assume the main currency. Safe to run on every start. */
 export function fillCurrencies() {

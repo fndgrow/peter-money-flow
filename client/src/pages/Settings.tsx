@@ -4,7 +4,7 @@ import { useData } from "../lib/store";
 import { categoryGroups } from "../lib/money";
 import type { Category, Project } from "../lib/types";
 import { CategoryForm, ProjectForm } from "../components/EntityForms";
-import { CompanyLogo, Field, Sheet } from "../components/ui";
+import { CatIcon, CompanyLogo, Field, Sheet } from "../components/ui";
 
 const CURRENCIES = ["EUR", "USD", "GBP", "CHF", "PLN", "CZK", "RON", "MDL", "UAH", "RUB", "TRY", "AED", "ILS", "SEK", "NOK", "DKK", "CAD", "AUD", "JPY", "INR"];
 
@@ -298,7 +298,9 @@ export function Settings() {
                     <div key={parent.id} className={`cat-group ${kids.length ? "open" : ""}`}>
                       <div className={`row-item static ${parent.archived ? "archived" : ""}`}>
                         <button className="row-main" onClick={() => setEditCat({ existing: parent, kind })}>
-                          <div className="ic">{parent.icon}</div>
+                          <div className="ic">
+                            <CatIcon cat={parent} size={42} />
+                          </div>
                           <div className="body">
                             <div className="t">{parent.name}</div>
                             {kids.length > 0 && <div className="s">{kids.length} sub-categories</div>}
@@ -314,7 +316,9 @@ export function Settings() {
                         <div className="cat-children">
                           {kids.map((c) => (
                             <button key={c.id} className={`row-item ${c.archived ? "archived" : ""}`} onClick={() => setEditCat({ existing: c, kind })}>
-                              <div className="ic">{c.icon}</div>
+                              <div className="ic">
+                                <CatIcon cat={c} size={42} />
+                              </div>
                               <div className="body">
                                 <div className="t sub">{c.name}</div>
                               </div>

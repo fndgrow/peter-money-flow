@@ -23,6 +23,8 @@ export interface Category {
   system: string | null;
   /** Top-level category this one belongs to (one level of nesting), or null. */
   parent_id: number | null;
+  /** Optional image (/brand/… or /api/files/…) shown instead of the emoji icon. */
+  logo?: string | null;
 }
 
 export interface Person {

@@ -4,7 +4,7 @@ import { useData } from "../lib/store";
 import { addDays, daysBetween, formatDate, makeConv, monthEnd, monthKey, monthLabel, shiftMonth, todayStr } from "../lib/money";
 import type { Category, Transaction } from "../lib/types";
 import { Bars, Donut, Legend, Line, OTHER_COLOR, SERIES, type Slice } from "../components/charts";
-import { CompanyLogo, Empty } from "../components/ui";
+import { CatIcon, CompanyLogo, Empty } from "../components/ui";
 
 type PeriodKey = "month" | "last" | "3m" | "6m" | "year" | "all";
 const PERIODS: { key: PeriodKey; label: string }[] = [
@@ -118,7 +118,7 @@ export function Dashboard() {
     const rows = [...cur.entries()]
       .map(([id, amount]) => {
         const cat = id ? state.categories.find((x) => x.id === id) : undefined;
-        return { id, name: cat?.name ?? "Uncategorised", icon: cat?.icon ?? "📦", amount, prev: prev.get(id) ?? 0, color: id ? (colorMap.get(id) ?? OTHER_COLOR) : OTHER_COLOR };
+        return { id, name: cat?.name ?? "Uncategorised", icon: cat?.icon ?? "📦", logo: cat?.logo ?? null, amount, prev: prev.get(id) ?? 0, color: id ? (colorMap.get(id) ?? OTHER_COLOR) : OTHER_COLOR };
       })
       .sort((a, b) => b.amount - a.amount);
     return rows;
@@ -143,7 +143,7 @@ export function Dashboard() {
     return [...m.entries()]
       .map(([id, amount]) => {
         const cat = id ? state.categories.find((x) => x.id === id) : undefined;
-        return { id, name: cat?.name ?? "Other", icon: cat?.icon ?? "➕", amount };
+        return { id, name: cat?.name ?? "Other", icon: cat?.icon ?? "➕", logo: cat?.logo ?? null, amount };
       })
       .sort((a, b) => b.amount - a.amount);
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -378,7 +378,7 @@ export function Dashboard() {
                   {incomeByCat.map((r) => (
                     <tr key={String(r.id)}>
                       <td>
-                        {r.icon} {r.name}
+                        <CatIcon cat={r} size={18} /> {r.name}
                       </td>
                       <td>{fmt(r.amount)}</td>
                       <td>{income ? Math.round((r.amount / income) * 100) : 0}%</td>
@@ -570,7 +570,7 @@ export function Dashboard() {
               {byCat.map((r) => (
                 <tr key={String(r.id)}>
                   <td>
-                    {r.icon} {r.name}
+                    <CatIcon cat={r} size={18} /> {r.name}
                   </td>
                   <td>{fmt(r.amount)}</td>
                   <td>{expense ? Math.round((r.amount / expense) * 100) : 0}%</td>
@@ -610,7 +610,7 @@ export function Dashboard() {
             return (
               <Link key={String(r.id)} to={`/transactions?category=${r.id ?? ""}`} className="rank-row" style={{ color: "inherit" }}>
                 <span className="n">
-                  {r.icon} {r.name}
+                  <CatIcon cat={r} size={18} /> {r.name}
                 </span>
                 <span className="amt">{fmt(r.amount)}</span>
                 <div className="bar">
@@ -697,7 +697,7 @@ export function Dashboard() {
             {incomeByCat.map((r) => (
               <Link key={String(r.id)} to={`/transactions?category=${r.id ?? ""}`} className="rank-row" style={{ color: "inherit" }}>
                 <span className="n">
-                  {r.icon} {r.name}
+                  <CatIcon cat={r} size={18} /> {r.name}
                 </span>
                 <span className="amt">{fmt(r.amount)}</span>
                 <div className="bar">

@@ -5,7 +5,7 @@ import { useData } from "../lib/store";
 import { catLabel, monthKey, monthLabel, todayStr } from "../lib/money";
 import type { BudgetItem } from "../lib/types";
 import { CategoryPicker } from "./CategoryPicker";
-import { ConfirmDelete, Empty, Field, Sheet } from "./ui";
+import { CatIcon, ConfirmDelete, Empty, Field, Sheet } from "./ui";
 
 /**
  * Monthly plan: a list of what I expect to spend each month (subscriptions, family, haircut...).
@@ -45,7 +45,7 @@ export function BudgetCard() {
   const [manage, setManage] = useState(false);
   const [edit, setEdit] = useState<BudgetItem | "new" | null>(null);
   const f = fmtIn(plan.cur);
-  const icon = (catId: number | null) => state.categories.find((c) => c.id === catId)?.icon ?? "📋";
+  const icon = (catId: number | null, size = 20) => <CatIcon cat={state.categories.find((c) => c.id === catId)} size={size} fallback="📋" />;
   // For a sub-category, the group it belongs to (so two "Phone" lines read Personal vs Company subscriptions).
   const group = (catId: number | null) => {
     const c = state.categories.find((x) => x.id === catId);
@@ -118,7 +118,7 @@ export function BudgetCard() {
             <div className="list">
               {state.budget.map((b) => (
                 <button key={b.id} className="row-item" onClick={() => setEdit(b)}>
-                  <div className="ic">{icon(b.category_id)}</div>
+                  <div className="ic">{icon(b.category_id, 42)}</div>
                   <div className="body">
                     <div className="t">{b.name}</div>
                     <div className="s">{b.category_id ? catLabel(state.categories, state.categories.find((c) => c.id === b.category_id)) : "No category"}</div>
